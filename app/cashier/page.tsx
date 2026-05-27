@@ -1,16 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
+// 1. Definisi Interface untuk Item di Dalam Pesanan
+interface OrderItem {
+  qty: number;
+  subtotal: number;
+  menu?: {
+    name: string;
+  };
+}
+
+// 2. Definisi Interface Utama Objek Order dari Backend
+interface Order {
+  id: number;
+  tableNumber: string | number;
+  customerName: string;
+  status: "PENDING" | "PAID" | string; // Sesuai enum backend kamu
+  total: number;
+  orderItems?: OrderItem[];
+}
+
 export default function CashierPage() {
-  const [orders, setOrders] = useState([]);
+  // Fix: Terapkan tipe Order[] pada useState untuk menghindari perangkap 'never[]'
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  const fetchOrders = async () => {
-    const token = localStorage.getItem("token");
+  // Fix: Bungkus fetchOrders dengan useCallback agar aman dimasukkan ke dependency array useEffect
+  const fetchOrders = useCallback(async () => {
+    // Fix: Proteksi localStorage dari engine Server-Side Pre-rendering Next.js
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) {
       router.push("/login");
       return;
@@ -23,21 +46,22 @@ export default function CashierPage() {
         },
       });
       const data = await res.json();
-      // Pastikan data adalah array (cek struktur response backend)
       setOrders(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Gagal mengambil order:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [router, API_URL]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOrders();
-  }, []);
+  }, [fetchOrders]);
 
   const handleUpdateStatus = async (orderId: number) => {
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     try {
       const res = await fetch(`${API_URL}/order/${orderId}`, {
         method: "PATCH",
@@ -45,7 +69,7 @@ export default function CashierPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status: "PAID" }), // Sesuai UpdateOrderStatusDto
+        body: JSON.stringify({ status: "PAID" }),
       });
 
       if (res.ok) {
@@ -57,6 +81,13 @@ export default function CashierPage() {
     } catch (error) {
       alert("Terjadi kesalahan server.");
     }
+  };
+
+  const handleLogout = () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+    }
+    router.push("/login");
   };
 
   return (
@@ -71,10 +102,7 @@ export default function CashierPage() {
           </p>
         </div>
         <button
-          onClick={() => {
-            localStorage.removeItem("token");
-            router.push("/login");
-          }}
+          onClick={handleLogout}
           className="text-[10px] font-bold bg-white px-4 py-2 rounded-full shadow-sm hover:bg-red-50 hover:text-red-600 transition-all"
         >
           LOGOUT
@@ -87,7 +115,7 @@ export default function CashierPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {orders.map((order: any) => (
+          {orders.map((order) => (
             <div
               key={order.id}
               className="bg-white rounded-[40px] p-8 shadow-sm border border-zinc-100 flex flex-col justify-between space-y-6"
@@ -118,7 +146,7 @@ export default function CashierPage() {
                   <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest border-b pb-2">
                     Pesanan:
                   </p>
-                  {order.orderItems?.map((item: any, idx: number) => (
+                  {order.orderItems?.map((item, idx) => (
                     <div
                       key={idx}
                       className="flex justify-between text-sm italic"

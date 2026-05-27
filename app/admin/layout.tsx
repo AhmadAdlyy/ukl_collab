@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link"; // Gunakan Link Next.js agar navigasi SPA lancar
 
 export default function AdminLayout({
   children,
@@ -13,17 +14,22 @@ export default function AdminLayout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    // Proteksi: Jika tidak ada token, tendang ke login
+    // Proteksi SSR: Pastikan hanya berjalan di client-side
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
     if (!token) {
       router.push("/login");
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
     }
   }, [router]);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("token");
+    }
     router.push("/login");
   };
 
@@ -39,7 +45,7 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-zinc-50 font-sans">
-      {/* Sidebar Statis untuk semua halaman Admin */}
+      {/* Sidebar Statis */}
       <aside className="fixed inset-y-0 left-0 w-64 bg-black text-white p-8 flex flex-col justify-between z-20">
         <div>
           <h1 className="text-2xl font-bold italic mb-12 tracking-tighter">
@@ -61,6 +67,12 @@ export default function AdminLayout({
               href="/admin/category"
               active={pathname === "/admin/category"}
               label="KATEGORI"
+            />
+            {/* Navigasi Baru untuk Kasir */}
+            <AdminNavLink
+              href="/admin/cashier"
+              active={pathname === "/admin/cashier"}
+              label="KELOLA KASIR"
             />
             <AdminNavLink
               href="/admin/reports"
@@ -95,7 +107,6 @@ export default function AdminLayout({
   );
 }
 
-// Komponen Kecil untuk Link Navigasi agar kode lebih bersih
 function AdminNavLink({
   href,
   active,
@@ -106,7 +117,7 @@ function AdminNavLink({
   label: string;
 }) {
   return (
-    <a
+    <Link
       href={href}
       className={`block px-4 py-3 rounded-xl text-[10px] font-bold tracking-[0.2em] transition-all ${
         active
@@ -115,6 +126,6 @@ function AdminNavLink({
       }`}
     >
       {label}
-    </a>
+    </Link>
   );
 }

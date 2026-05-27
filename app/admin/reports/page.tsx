@@ -1,34 +1,63 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+
+// 1. Definisikan Interface untuk Data Laporan
+interface OrderItem {
+  qty: number;
+  menu: string;
+}
+
+interface ReportOrder {
+  id: number;
+  customerName: string;
+  tableNumber: string | number;
+  date: string;
+  time: string;
+  items: OrderItem[];
+  total: number;
+}
+
+interface ReportData {
+  totalIncome: number;
+  totalOrders: number;
+  orders: ReportOrder[];
+}
 
 export default function ReportsPage() {
-  const [reportData, setReportData] = useState<any>(null);
+  // Fix: Ganti <any> menjadi <ReportData | null>
+  const [reportData, setReportData] = useState<ReportData | null>(null);
   const [reportType, setReportType] = useState("daily"); // default harian
   const [loading, setLoading] = useState(true);
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  const fetchReport = async (type: string) => {
-    setLoading(true);
-    const token = localStorage.getItem("token");
-    try {
-      const res = await fetch(`${API_URL}/order/report/${type}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setReportData(data);
-    } catch (error) {
-      console.error("Gagal mengambil laporan:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Fix: Gunakan useCallback agar aman dijadikan dependensi useEffect
+  const fetchReport = useCallback(
+    async (type: string) => {
+      setLoading(true);
+      // Fix: Tambahkan pengecekan window untuk menghindari isu SSR di Next.js
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      try {
+        const res = await fetch(`${API_URL}/order/report/${type}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        setReportData(data);
+      } catch (error) {
+        console.error("Gagal mengambil laporan:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [API_URL],
+  );
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchReport(reportType);
-  }, [reportType]);
+  }, [reportType, fetchReport]);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -119,7 +148,8 @@ export default function ReportsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
-                {reportData?.orders?.map((order: any) => (
+                {/* Fix: Loop order otomatis mendeteksi tipe data ReportOrder */}
+                {reportData?.orders?.map((order) => (
                   <tr
                     key={order.id}
                     className="hover:bg-zinc-50 transition-colors"
@@ -135,7 +165,8 @@ export default function ReportsPage() {
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex flex-wrap gap-1">
-                        {order.items.map((item: any, i: number) => (
+                        {/* Fix: Loop item otomatis mendeteksi tipe data OrderItem */}
+                        {order.items.map((item, i) => (
                           <span
                             key={i}
                             className="text-[9px] bg-zinc-100 px-2 py-1 rounded-md font-bold text-zinc-600"

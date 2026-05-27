@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+
+// 1. Definisikan interface untuk Kategori
+interface Category {
+  id: number;
+  name: string;
+}
 
 export default function CategoryPage() {
-  const [categories, setCategories] = useState([]);
+  // Fix: Berikan tipe data <Category[]> agar tidak dianggap <never[]>
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   // State untuk Modal
@@ -14,26 +21,30 @@ export default function CategoryPage() {
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  const fetchCategories = async () => {
+  // Fix: Bungkus dengan useCallback agar aman dimasukkan ke dependency array useEffect
+  const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/category`);
       const data = await res.json();
-      setCategories(data);
+      // TypeScript sekarang tahu bahwa data yang dimasukkan harus cocok dengan struktur Category[]
+      setCategories(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Gagal memuat kategori");
-    } finally {
+    }
+    {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   // Buka Modal (Tambah atau Edit)
-  const openModal = (cat?: any) => {
+  // Fix: Ganti 'any' dengan tipe data 'Category' yang sudah dibuat
+  const openModal = (cat?: Category) => {
     if (cat) {
       setIsEditing(true);
       setCurrentId(cat.id);
@@ -48,7 +59,8 @@ export default function CategoryPage() {
   // Submit Form (POST atau PATCH)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const method = isEditing ? "PATCH" : "POST";
     const url = isEditing
       ? `${API_URL}/category/${currentId}`
@@ -77,7 +89,8 @@ export default function CategoryPage() {
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Hapus kategori "${name}"?`)) return;
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     try {
       const res = await fetch(`${API_URL}/category/${id}`, {
         method: "DELETE",
@@ -185,7 +198,8 @@ export default function CategoryPage() {
                 </td>
               </tr>
             ) : (
-              categories.map((cat: any) => (
+              // Fix: 'cat' otomatis bertipe 'Category' karena state 'categories' sudah diketik dengan benar
+              categories.map((cat) => (
                 <tr
                   key={cat.id}
                   className="group hover:bg-zinc-50/50 transition-all"

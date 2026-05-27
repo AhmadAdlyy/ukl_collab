@@ -1,11 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
+// 1. Definisikan Interface untuk Kategori dan Menu
+interface Category {
+  id: number;
+  name: string;
+}
+
+interface Menu {
+  id: number;
+  name: string;
+  price: number;
+  description: string;
+  image: string;
+  categoryId: number;
+  category?: {
+    name: string;
+  };
+}
+
 export default function ManageMenuPage() {
-  const [menus, setMenus] = useState([]);
-  const [categories, setCategories] = useState([]);
+  // Fix: Tentukan tipe data array agar tidak dianggap never[]
+  const [menus, setMenus] = useState<Menu[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
   // State Modal & Edit
@@ -25,33 +44,39 @@ export default function ManageMenuPage() {
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  const fetchMenus = async () => {
+  // Fix: Gunakan useCallback agar aman dijadikan dependensi useEffect
+  const fetchMenus = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/menu`);
       const data = await res.json();
-      setMenus(data);
+      setMenus(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Gagal load menu");
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
-  const fetchCategories = async () => {
-    const res = await fetch(`${API_URL}/category`);
-    const data = await res.json();
-    setCategories(data);
-  };
+  const fetchCategories = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/category`);
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Gagal load kategori");
+    }
+  }, [API_URL]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMenus();
     fetchCategories();
-  }, []);
+  }, [fetchMenus, fetchCategories]);
 
   // FUNGSI MEMBUKA MODAL EDIT
-  const handleEditOpen = (menu: any) => {
+  // Fix: Mengubah tipe data 'any' menjadi 'Menu'
+  const handleEditOpen = (menu: Menu) => {
     setIsEditing(true);
     setSelectedId(menu.id);
     setFormData({
@@ -60,17 +85,18 @@ export default function ManageMenuPage() {
       description: menu.description,
       categoryId: menu.categoryId.toString(),
     });
-    // Set preview ke gambar yang sudah ada di server
     setPreviewUrl(`${API_URL}/uploads/${menu.image}`);
     setShowModal(true);
   };
 
-  // FUNGSI HAPUS MENU (LOGIK BARU)
+  // FUNGSI HAPUS MENU
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Hapus menu "${name}"? Tindakan ini tidak bisa dibatalkan.`))
       return;
 
-    const token = localStorage.getItem("token");
+    // Fix: Validasi window sebelum akses localStorage untuk menghindari isu SSR
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
     try {
       const res = await fetch(`${API_URL}/menu/${id}`, {
         method: "DELETE",
@@ -102,9 +128,9 @@ export default function ManageMenuPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-    // Gunakan FormData karena kita mengirim File Gambar
     const data = new FormData();
     data.append("name", formData.name);
     data.append("price", formData.price);
@@ -119,7 +145,7 @@ export default function ManageMenuPage() {
       const res = await fetch(url, {
         method: method,
         headers: { Authorization: `Bearer ${token}` },
-        body: data, // Jangan set Content-Type manual jika pakai FormData
+        body: data,
       });
 
       if (res.ok) {
@@ -241,7 +267,7 @@ export default function ManageMenuPage() {
                     }
                   >
                     <option value="">Kategori...</option>
-                    {categories.map((cat: any) => (
+                    {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>
                         {cat.name}
                       </option>
@@ -276,7 +302,7 @@ export default function ManageMenuPage() {
             LOADING MENU...
           </p>
         ) : (
-          menus.map((menu: any) => (
+          menus.map((menu) => (
             <div
               key={menu.id}
               className="bg-white p-6 rounded-[45px] shadow-sm border border-zinc-100 flex flex-col justify-between hover:shadow-xl transition-all group"

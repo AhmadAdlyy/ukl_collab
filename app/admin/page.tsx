@@ -2,8 +2,25 @@
 
 import { useEffect, useState } from "react";
 
+// 1. Definisikan Interface untuk Data Stats Dashboard
+interface DashboardStats {
+  totalMenu: number;
+  totalCategory: number;
+  totalOrdersToday: number;
+  totalIncomeToday: number;
+}
+
+// 2. Definisikan Interface untuk Props StatCard
+interface StatCardProps {
+  title: string;
+  value: number;
+  unit: string;
+  color: string;
+}
+
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState({
+  // Fix: Terapkan tipe data interface pada useState
+  const [stats, setStats] = useState<DashboardStats>({
     totalMenu: 0,
     totalCategory: 0,
     totalOrdersToday: 0,
@@ -15,7 +32,9 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const token = localStorage.getItem("token");
+      // Fix: Proteksi localStorage dari error SSR di lingkungan server Next.js
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
       try {
         // Kita ambil data menu, kategori, dan report harian sekaligus
@@ -34,9 +53,9 @@ export default function AdminDashboardPage() {
         setStats({
           totalMenu: Array.isArray(menus) ? menus.length : 0,
           totalCategory: Array.isArray(cats) ? cats.length : 0,
-          // Mengambil totalOrders dan totalIncome dari response report backend kamu
-          totalOrdersToday: report.totalOrders || 0,
-          totalIncomeToday: report.totalIncome || 0,
+          // Mengambil totalOrders dan totalIncome dari response report backend
+          totalOrdersToday: report?.totalOrders || 0,
+          totalIncomeToday: report?.totalIncome || 0,
         });
       } catch (error) {
         console.error("Error fetching dashboard stats:", error);
@@ -46,7 +65,7 @@ export default function AdminDashboardPage() {
     };
 
     fetchData();
-  }, []);
+  }, [API_URL]); // Fix: Tambahkan API_URL ke dalam dependency array
 
   if (loading) {
     return (
@@ -141,7 +160,8 @@ export default function AdminDashboardPage() {
   );
 }
 
-function StatCard({ title, value, unit, color }: any) {
+// Fix: Definisikan props secara gamblang dengan interface StatCardProps (bebas dari 'any')
+function StatCard({ title, value, unit, color }: StatCardProps) {
   return (
     <div
       className={`${color} p-8 rounded-[40px] border border-zinc-100 shadow-sm transition-all hover:shadow-xl hover:-translate-y-1`}

@@ -3,9 +3,26 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 
+// 1. Definisikan Interface untuk Data Menu dari Backend
+interface MenuItem {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  image: string;
+}
+
+// 2. Definisikan Interface untuk Item di Dalam Keranjang Belanja
+interface CartItem {
+  menu: MenuItem;
+  qty: number;
+}
+
 export default function UserMenuPage() {
-  const [menus, setMenus] = useState([]);
-  const [cart, setCart] = useState<{ menu: any; qty: number }[]>([]);
+  // Fix: Ganti [] menjadi <MenuItem[]> untuk menghindari perangkap type 'never[]'
+  const [menus, setMenus] = useState<MenuItem[]>([]);
+  // Fix: Terapkan interface CartItem yang sudah didefinisikan secara eksplisit
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [showCheckout, setShowCheckout] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [tableNumber, setTableNumber] = useState("");
@@ -15,10 +32,12 @@ export default function UserMenuPage() {
   useEffect(() => {
     fetch(`${API_URL}/menu`)
       .then((res) => res.json())
-      .then(setMenus);
+      .then((data) => setMenus(data))
+      .catch((err) => console.error("Gagal mengambil data menu:", err));
   }, []);
 
-  const addToCart = (menu: any) => {
+  // Fix: Ubah tipe parameter menu dari 'any' ke 'MenuItem'
+  const addToCart = (menu: MenuItem) => {
     const existing = cart.find((item) => item.menu.id === menu.id);
     if (existing) {
       setCart(
@@ -75,6 +94,8 @@ export default function UserMenuPage() {
         alert("Pesanan JOSS! Sedang disiapkan.");
         setCart([]);
         setShowCheckout(false);
+        setCustomerName("");
+        setTableNumber("");
       }
     } catch (e) {
       alert("Gagal kirim pesanan");
@@ -129,7 +150,7 @@ export default function UserMenuPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {menus.map((menu: any) => (
+            {menus.map((menu) => (
               <div
                 key={menu.id}
                 className="bg-white p-5 rounded-[35px] border border-zinc-100 flex items-center gap-5 hover:shadow-xl transition-all group"
@@ -142,8 +163,9 @@ export default function UserMenuPage() {
                     className="object-cover group-hover:scale-110 transition-transform duration-500"
                     unoptimized
                     onError={(e) => {
-                      (e.target as any).src =
-                        "https://placehold.co/400x400?text=Food";
+                      // Fix: Hindari penggunaan 'any' casting pada HTMLImageElement
+                      const target = e.target as HTMLImageElement;
+                      target.src = "https://placehold.co/400x400?text=Food";
                     }}
                   />
                 </div>
