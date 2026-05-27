@@ -1,19 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 
-// 1. Definisikan interface untuk Kategori
 interface Category {
   id: number;
   name: string;
 }
 
 export default function CategoryPage() {
-  // Fix: Berikan tipe data <Category[]> agar tidak dianggap <never[]>
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // State untuk Modal
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState<number | null>(null);
@@ -21,29 +18,30 @@ export default function CategoryPage() {
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  // Fix: Bungkus dengan useCallback agar aman dimasukkan ke dependency array useEffect
-  const fetchCategories = useCallback(async () => {
+  const fetchCategories = async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/category`);
       const data = await res.json();
-      // TypeScript sekarang tahu bahwa data yang dimasukkan harus cocok dengan struktur Category[]
-      setCategories(Array.isArray(data) ? data : []);
+
+      if (Array.isArray(data)) {
+        setCategories(data);
+      } else {
+        setCategories([]);
+      }
     } catch (error) {
-      console.error("Gagal memuat kategori");
-    }
-    {
+      console.error("Gagal fetch kategori:", error);
+      setCategories([]);
+    } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCategories();
-  }, [fetchCategories]);
+  }, []);
 
-  // Buka Modal (Tambah atau Edit)
-  // Fix: Ganti 'any' dengan tipe data 'Category' yang sudah dibuat
   const openModal = (cat?: Category) => {
     if (cat) {
       setIsEditing(true);
@@ -51,16 +49,21 @@ export default function CategoryPage() {
       setCategoryName(cat.name);
     } else {
       setIsEditing(false);
+      setCurrentId(null);
       setCategoryName("");
     }
     setShowModal(true);
   };
 
-  // Submit Form (POST atau PATCH)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Anda belum login!");
+      return;
+    }
+
     const method = isEditing ? "PATCH" : "POST";
     const url = isEditing
       ? `${API_URL}/category/${currentId}`
@@ -77,87 +80,111 @@ export default function CategoryPage() {
       });
 
       if (res.ok) {
+        alert(
+          isEditing
+            ? "Kategori berhasil diupdate!"
+            : "Kategori berhasil ditambah!",
+        );
         setShowModal(false);
+        setCategoryName("");
         fetchCategories();
       } else {
-        alert("Gagal memproses kategori. Cek otorisasi Anda.");
+        alert("Gagal menyimpan kategori.");
       }
     } catch (error) {
-      alert("Terjadi kesalahan koneksi.");
+      alert("Terjadi kesalahan.");
     }
   };
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Hapus kategori "${name}"?`)) return;
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      alert("Anda belum login!");
+      return;
+    }
+
     try {
       const res = await fetch(`${API_URL}/category/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) fetchCategories();
+
+      if (res.ok) {
+        alert("Kategori berhasil dihapus!");
+        fetchCategories();
+      } else {
+        alert("Gagal menghapus kategori.");
+      }
     } catch (error) {
-      alert("Gagal menghapus.");
+      alert("Terjadi kesalahan.");
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-stone-500 text-sm">Memuat data...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-4xl space-y-8 animate-in fade-in duration-500">
-      {/* Header Section */}
-      <div className="flex justify-between items-center bg-white p-8 rounded-[40px] shadow-sm border border-zinc-100">
+    <div className="max-w-4xl mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex justify-between items-center border-b border-stone-200 pb-4">
         <div>
-          <h2 className="text-3xl font-black italic tracking-tighter uppercase">
-            Kategori
-          </h2>
-          <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-1">
-            Management System
-          </p>
+          <h2 className="text-xl font-medium text-stone-700">Kategori</h2>
+          <p className="text-stone-400 text-sm mt-0.5">Kelola kategori menu</p>
         </div>
         <button
           onClick={() => openModal()}
-          className="bg-black text-white px-8 py-4 rounded-full text-[10px] font-black tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-xl"
+          className="bg-stone-800 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-stone-700 transition-colors"
         >
-          + TAMBAH KATEGORI
+          + Tambah Kategori
         </button>
       </div>
 
-      {/* CUSTOM MODAL UI */}
+      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-sm rounded-[50px] p-10 shadow-2xl space-y-8 animate-in zoom-in duration-300">
-            <div className="text-center">
-              <h3 className="text-2xl font-black italic tracking-tighter uppercase">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-lg">
+            <div className="p-6 border-b border-stone-100">
+              <h3 className="text-lg font-medium text-stone-800">
                 {isEditing ? "Edit Kategori" : "Kategori Baru"}
               </h3>
-              <p className="text-zinc-400 text-[9px] font-bold tracking-widest uppercase mt-1">
-                Isi nama kategori di bawah
-              </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <input
-                autoFocus
-                type="text"
-                placeholder="Misal: MAIN COURSE"
-                className="w-full p-5 rounded-3xl bg-zinc-100 border-none outline-none focus:ring-2 focus:ring-black font-black text-center text-sm uppercase tracking-widest"
-                value={categoryName}
-                onChange={(e) => setCategoryName(e.target.value)}
-                required
-              />
-              <div className="flex gap-3 pt-2">
+            <form onSubmit={handleSubmit}>
+              <div className="p-6">
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="Nama kategori"
+                  className="w-full px-4 py-2 rounded-lg bg-stone-50 border border-stone-200 focus:outline-none focus:border-stone-400 focus:bg-white text-stone-700 text-sm"
+                  value={categoryName}
+                  onChange={(e) => setCategoryName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex gap-2 p-6 pt-0">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 p-4 rounded-full font-black text-[10px] tracking-widest text-zinc-400 hover:text-zinc-900 transition-colors"
+                  className="flex-1 px-4 py-2 rounded-lg border border-stone-200 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-colors"
                 >
-                  BATAL
+                  Batal
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 p-4 bg-black text-white rounded-full font-black text-[10px] tracking-widest shadow-lg active:scale-95 transition-transform"
+                  className="flex-1 px-4 py-2 rounded-lg bg-stone-800 text-white text-sm font-medium hover:bg-stone-700 transition-colors"
                 >
-                  SIMPAN
+                  Simpan
                 </button>
               </div>
             </form>
@@ -165,65 +192,50 @@ export default function CategoryPage() {
         </div>
       )}
 
-      {/* List Table */}
-      <div className="bg-white rounded-[45px] border border-zinc-100 shadow-sm overflow-hidden">
+      {/* Table */}
+      <div className="bg-white rounded-lg border border-stone-200 shadow-sm overflow-hidden">
         <table className="w-full text-left">
-          <thead className="bg-zinc-50/50 border-b border-zinc-100">
+          <thead className="bg-stone-50 border-b border-stone-200">
             <tr>
-              <th className="px-10 py-6 text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">
+              <th className="px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider">
                 Nama Kategori
               </th>
-              <th className="px-10 py-6 text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] text-right">
+              <th className="px-6 py-3 text-xs font-medium text-stone-500 uppercase tracking-wider text-right">
                 Aksi
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-50">
-            {loading ? (
+          <tbody className="divide-y divide-stone-100">
+            {categories.length === 0 ? (
               <tr>
                 <td
                   colSpan={2}
-                  className="p-20 text-center font-bold italic text-zinc-300 animate-pulse"
+                  className="px-6 py-12 text-center text-stone-400 text-sm"
                 >
-                  LOADING...
-                </td>
-              </tr>
-            ) : categories.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={2}
-                  className="p-20 text-center text-zinc-400 font-bold italic"
-                >
-                  Belum ada kategori.
+                  Belum ada kategori
                 </td>
               </tr>
             ) : (
-              // Fix: 'cat' otomatis bertipe 'Category' karena state 'categories' sudah diketik dengan benar
               categories.map((cat) => (
                 <tr
                   key={cat.id}
-                  className="group hover:bg-zinc-50/50 transition-all"
+                  className="hover:bg-stone-50 transition-colors"
                 >
-                  <td className="px-10 py-6">
-                    <div className="flex items-center gap-4">
-                      <div className="w-1.5 h-1.5 bg-black rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                      <span className="font-black italic text-lg tracking-tight text-zinc-800 uppercase">
-                        {cat.name}
-                      </span>
-                    </div>
+                  <td className="px-6 py-4">
+                    <span className="text-sm text-stone-700">{cat.name}</span>
                   </td>
-                  <td className="px-10 py-6 text-right space-x-2">
+                  <td className="px-6 py-4 text-right space-x-2">
                     <button
                       onClick={() => openModal(cat)}
-                      className="text-[10px] font-black tracking-widest text-zinc-300 hover:text-blue-600 px-3 py-2 transition-colors"
+                      className="text-xs text-stone-500 hover:text-stone-700 px-2 py-1 transition-colors"
                     >
-                      EDIT
+                      Edit
                     </button>
                     <button
                       onClick={() => handleDelete(cat.id, cat.name)}
-                      className="text-[10px] font-black tracking-widest text-red-200 hover:text-red-600 px-3 py-2 transition-colors"
+                      className="text-xs text-stone-400 hover:text-rose-600 px-2 py-1 transition-colors"
                     >
-                      HAPUS
+                      Hapus
                     </button>
                   </td>
                 </tr>

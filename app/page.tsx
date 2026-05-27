@@ -1,42 +1,70 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Image from "next/image";
+import { useEffect, useState } from "react";
 
-// 1. Definisikan Interface untuk Data Menu dari Backend
 interface MenuItem {
   id: number;
   name: string;
   description: string;
   price: number;
   image: string;
+  categoryId: number;
 }
 
-// 2. Definisikan Interface untuk Item di Dalam Keranjang Belanja
+interface Category {
+  id: number;
+  name: string;
+}
+
 interface CartItem {
   menu: MenuItem;
   qty: number;
 }
 
 export default function UserMenuPage() {
-  // Fix: Ganti [] menjadi <MenuItem[]> untuk menghindari perangkap type 'never[]'
   const [menus, setMenus] = useState<MenuItem[]>([]);
-  // Fix: Terapkan interface CartItem yang sudah didefinisikan secara eksplisit
+  const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [showCheckout, setShowCheckout] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [tableNumber, setTableNumber] = useState("");
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   useEffect(() => {
-    fetch(`${API_URL}/menu`)
-      .then((res) => res.json())
-      .then((data) => setMenus(data))
-      .catch((err) => console.error("Gagal mengambil data menu:", err));
-  }, []);
+    const fetchData = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [catRes, menuRes] = await Promise.all([
+          fetch(`${API_URL}/category`),
+          fetch(`${API_URL}/menu`),
+        ]);
 
-  // Fix: Ubah tipe parameter menu dari 'any' ke 'MenuItem'
+        const categoriesData = await catRes.json();
+        const menusData = await menuRes.json();
+
+        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+        setMenus(Array.isArray(menusData) ? menusData : []);
+      } catch (error) {
+        console.error("Gagal mengambil data:", error);
+        setError("Gagal memuat data. Coba lagi nanti.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []); // Dependency kosong, hanya fetch sekali
+
+  const filteredMenus =
+    selectedCategory === null
+      ? menus
+      : menus.filter((menu) => menu.categoryId === selectedCategory);
+
   const addToCart = (menu: MenuItem) => {
     const existing = cart.find((item) => item.menu.id === menu.id);
     if (existing) {
@@ -67,20 +95,25 @@ export default function UserMenuPage() {
     (sum, item) => sum + item.menu.price * item.qty,
     0,
   );
+  const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const handleCheckout = async () => {
-    if (!customerName || !tableNumber)
-      return alert("Nama dan Nomor Meja wajib diisi!");
-    if (cart.length === 0) return alert("Keranjang masih kosong!");
+    if (customerName.trim() === "" || tableNumber.trim() === "") {
+      alert("Nama dan Nomor Meja wajib diisi!");
+      return;
+    }
+    if (cart.length === 0) {
+      alert("Keranjang masih kosong!");
+      return;
+    }
 
     const orderData = {
       customerName,
       tableNumber,
       items: cart.map((item) => ({
         menuId: item.menu.id,
-        quantity: item.qty,
+        qty: item.qty,
       })),
-      totalPrice,
     };
 
     try {
@@ -91,261 +124,280 @@ export default function UserMenuPage() {
       });
 
       if (res.ok) {
-        alert("Pesanan JOSS! Sedang disiapkan.");
+        alert("Pesanan berhasil! Sedang disiapkan.");
         setCart([]);
-        setShowCheckout(false);
+        setIsCartOpen(false);
         setCustomerName("");
         setTableNumber("");
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Gagal memproses pesanan: ${errorData.message || "Coba lagi"}`);
       }
-    } catch (e) {
-      alert("Gagal kirim pesanan");
+    } catch {
+      alert("Gagal kirim pesanan, periksa koneksi internet.");
     }
   };
 
-  return (
-    <div className="min-h-screen bg-zinc-50 text-black font-sans pb-20 md:pb-0">
-      {/* HEADER SECTION */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-lg border-b border-zinc-100">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black italic tracking-tighter uppercase">
-              MixBowls.
-            </h1>
-            <p className="text-[10px] font-bold text-zinc-400 tracking-[0.3em] uppercase">
-              Premium Self-Order
-            </p>
-          </div>
-          <div className="hidden md:flex items-center gap-6">
-            <div className="text-right">
-              <p className="text-[10px] font-bold text-zinc-400 uppercase">
-                Status Meja
-              </p>
-              <p className="text-sm font-black italic">Tersedia</p>
-            </div>
-            <div className="w-10 h-10 bg-zinc-100 rounded-full flex items-center justify-center font-bold">
-              🛒
-            </div>
-          </div>
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http")) return imagePath;
+    return `${API_URL}/uploads/${imagePath}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-stone-500 text-sm">Memuat menu...</p>
         </div>
-      </header>
+      </div>
+    );
+  }
 
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* MENU GRID SECTION */}
-        <div className="lg:col-span-8 space-y-8">
-          <div className="relative h-48 md:h-64 rounded-[40px] overflow-hidden shadow-2xl">
-            <Image
-              src="https://images.unsplash.com/photo-1546069901-ba9599a7e63c"
-              alt="Hero"
-              fill
-              className="object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex flex-col justify-end p-8">
-              <span className="text-white/60 text-xs font-bold tracking-[0.4em] mb-2 uppercase">
-                Promo Hari Ini
-              </span>
-              <h2 className="text-white text-3xl md:text-5xl font-black italic tracking-tighter uppercase leading-none">
-                Diskon 20% <br /> Semua Bowls
-              </h2>
+  if (error) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="text-center text-rose-600 text-sm">{error}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-100">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 bg-white border-b border-stone-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 bg-stone-800 rounded-lg flex items-center justify-center">
+              <span className="text-white text-xs">🍜</span>
             </div>
+            <span className="font-medium text-stone-700">savory.</span>
           </div>
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex items-center gap-2 bg-stone-800 hover:bg-stone-700 px-3 py-1.5 rounded-lg text-white text-sm transition"
+          >
+            <span>🛒</span>
+            <span className="text-xs">{totalItems}</span>
+            <span className="w-px h-3 bg-white/30"></span>
+            <span className="text-xs">Rp {totalPrice.toLocaleString()}</span>
+          </button>
+        </div>
+      </nav>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {menus.map((menu) => (
-              <div
-                key={menu.id}
-                className="bg-white p-5 rounded-[35px] border border-zinc-100 flex items-center gap-5 hover:shadow-xl transition-all group"
+      {/* Hero */}
+      <div className="bg-stone-800 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <h1 className="text-3xl font-medium mb-1">savory.</h1>
+          <p className="text-stone-400 text-sm">
+            Pesan langsung dari meja kamu
+          </p>
+        </div>
+      </div>
+
+      <main className="max-w-7xl mx-auto px-4 py-8">
+        {/* Kategori */}
+        <div className="mb-8 overflow-x-auto pb-2">
+          <div className="flex gap-2 min-w-max">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`px-4 py-1.5 rounded-full text-sm transition ${
+                selectedCategory === null
+                  ? "bg-stone-800 text-white"
+                  : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"
+              }`}
+            >
+              Semua
+            </button>
+            {categories.map((category) => (
+              <button
+                key={category.id}
+                onClick={() => setSelectedCategory(category.id)}
+                className={`px-4 py-1.5 rounded-full text-sm transition ${
+                  selectedCategory === category.id
+                    ? "bg-stone-800 text-white"
+                    : "bg-white text-stone-600 hover:bg-stone-100 border border-stone-200"
+                }`}
               >
-                <div className="w-24 h-24 relative rounded-3xl overflow-hidden shadow-md shrink-0">
-                  <Image
-                    src={`${API_URL}/uploads/${menu.image}`}
-                    alt={menu.name}
-                    fill
-                    className="object-cover group-hover:scale-110 transition-transform duration-500"
-                    unoptimized
-                    onError={(e) => {
-                      // Fix: Hindari penggunaan 'any' casting pada HTMLImageElement
-                      const target = e.target as HTMLImageElement;
-                      target.src = "https://placehold.co/400x400?text=Food";
-                    }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-black italic text-lg uppercase truncate">
-                    {menu.name}
-                  </h3>
-                  <p className="text-zinc-400 text-[10px] line-clamp-1 mb-2">
-                    {menu.description}
-                  </p>
-                  <div className="flex justify-between items-center">
-                    <span className="font-black text-sm italic">
-                      Rp {menu.price.toLocaleString()}
-                    </span>
-                    <button
-                      onClick={() => addToCart(menu)}
-                      className="bg-black text-white w-8 h-8 rounded-full font-black hover:scale-110 transition-all shadow-lg active:scale-90"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
+                {category.name}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* CART SIDEBAR (DESKTOP) */}
-        <aside className="hidden lg:block lg:col-span-4 sticky top-24 h-fit">
-          <div className="bg-white p-8 rounded-[40px] shadow-sm border border-zinc-100 space-y-6">
-            <h2 className="text-2xl font-black italic uppercase tracking-tighter">
-              Ringkasan Pesanan
-            </h2>
-            {cart.length === 0 ? (
-              <p className="text-zinc-300 italic text-sm text-center py-10">
-                Keranjang masih kosong...
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {cart.map((item, idx) => (
-                  <div key={idx} className="flex justify-between items-center">
-                    <div className="flex flex-col">
-                      <span className="font-bold text-sm uppercase">
-                        {item.menu.name}
-                      </span>
-                      <div className="flex items-center gap-3 mt-1">
-                        <button
-                          onClick={() => removeFromCart(item.menu.id)}
-                          className="text-xs bg-zinc-100 w-5 h-5 rounded-md"
-                        >
-                          -
-                        </button>
-                        <span className="text-xs font-black italic">
-                          {item.qty}
-                        </span>
-                        <button
-                          onClick={() => addToCart(item.menu)}
-                          className="text-xs bg-zinc-100 w-5 h-5 rounded-md"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                    <span className="font-black text-sm italic">
-                      Rp {(item.menu.price * item.qty).toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-                <hr className="border-zinc-50" />
-                <div className="space-y-3">
-                  <input
-                    type="text"
-                    placeholder="NAMA ANDA"
-                    className="w-full p-4 rounded-2xl bg-zinc-50 border-none outline-none font-bold text-xs"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                  />
-                  <input
-                    type="number"
-                    placeholder="MEJA NOMOR"
-                    className="w-full p-4 rounded-2xl bg-zinc-50 border-none outline-none font-bold text-xs"
-                    value={tableNumber}
-                    onChange={(e) => setTableNumber(e.target.value)}
-                  />
-                </div>
-                <div className="flex justify-between text-xl font-black italic pt-4">
-                  <span>TOTAL</span>
-                  <span>Rp {totalPrice.toLocaleString()}</span>
-                </div>
-                <button
-                  onClick={handleCheckout}
-                  className="w-full bg-black text-white p-5 rounded-3xl font-black tracking-widest text-xs hover:bg-zinc-800 transition-all shadow-xl"
-                >
-                  PESAN SEKARANG
-                </button>
-              </div>
-            )}
+        {/* Menu Grid */}
+        {filteredMenus.length === 0 ? (
+          <div className="text-center py-16 bg-white rounded-lg border border-stone-200">
+            <span className="text-5xl mb-3 block opacity-50">🍽️</span>
+            <p className="text-stone-400 text-sm">Belum ada menu</p>
           </div>
-        </aside>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {filteredMenus.map((menu) => (
+                <div
+                  key={menu.id}
+                  className="bg-white rounded-lg border border-stone-200 hover:shadow-md transition"
+                >
+                  <div className="h-40 w-full bg-stone-100 rounded-t-lg overflow-hidden">
+                    {menu.image ? (
+                      <img
+                        src={getImageUrl(menu.image)!}
+                        alt={menu.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://placehold.co/400x300?text=No+Image";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-stone-300 text-4xl">
+                        🍽️
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4">
+                    <span className="text-[10px] text-stone-400 bg-stone-50 px-2 py-0.5 rounded-full">
+                      {categories.find((c) => c.id === menu.categoryId)?.name ||
+                        "Menu"}
+                    </span>
+                    <h3 className="font-medium text-stone-800 mt-1">
+                      {menu.name}
+                    </h3>
+                    <p className="text-stone-400 text-xs mt-1 line-clamp-2">
+                      {menu.description}
+                    </p>
+                    <div className="flex justify-between items-center mt-3">
+                      <span className="font-semibold text-stone-700">
+                        Rp {menu.price.toLocaleString()}
+                      </span>
+                      <button
+                        onClick={() => addToCart(menu)}
+                        className="bg-stone-800 text-white w-8 h-8 rounded-full text-lg hover:bg-stone-700 transition flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 text-center">
+              <p className="text-xs text-stone-400">
+                Menampilkan {filteredMenus.length} menu
+              </p>
+            </div>
+          </>
+        )}
       </main>
 
-      {/* MOBILE FLOATING BAR */}
-      <div className="lg:hidden fixed bottom-6 left-0 right-0 px-6 z-40">
-        <button
-          onClick={() => setShowCheckout(true)}
-          className={`w-full bg-black text-white p-5 rounded-[30px] shadow-2xl flex justify-between items-center transition-all duration-500 ${cart.length > 0 ? "translate-y-0 opacity-100" : "translate-y-20 opacity-0 pointer-events-none"}`}
-        >
-          <div className="flex gap-4 items-center">
-            <span className="bg-white text-black w-8 h-8 rounded-xl flex items-center justify-center font-black italic text-xs">
-              {cart.length}
-            </span>
-            <span className="font-black text-xs tracking-widest italic">
-              LIHAT KERANJANG
-            </span>
-          </div>
-          <span className="font-black text-lg italic">
-            Rp {totalPrice.toLocaleString()}
-          </span>
-        </button>
-      </div>
-
-      {/* MOBILE BOTTOM SHEET MODAL */}
-      {showCheckout && (
-        <div className="lg:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end">
-          <div className="bg-white w-full rounded-t-[50px] p-10 space-y-6 animate-in slide-in-from-bottom duration-300 max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-black italic uppercase tracking-tighter">
-                Konfirmasi Order
-              </h2>
+      {/* Cart Sidebar */}
+      {isCartOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-50"
+            onClick={() => setIsCartOpen(false)}
+          />
+          <div className="fixed right-0 top-0 h-full w-full max-w-[90vw] sm:max-w-md bg-white shadow-xl z-50 overflow-y-auto">
+            <div className="sticky top-0 bg-stone-800 text-white p-4 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span>🛒</span>
+                <h2 className="font-medium">Pesanan Saya</h2>
+              </div>
               <button
-                onClick={() => setShowCheckout(false)}
-                className="text-zinc-300 text-2xl"
+                onClick={() => setIsCartOpen(false)}
+                className="text-white/70 hover:text-white text-xl"
               >
                 ✕
               </button>
             </div>
-            <div className="space-y-4 py-4">
-              {cart.map((item, idx) => (
-                <div key={idx} className="flex justify-between">
-                  <span className="font-bold text-sm uppercase">
-                    {item.qty}x {item.menu.name}
-                  </span>
-                  <span className="font-black text-sm">
-                    Rp {(item.menu.price * item.qty).toLocaleString()}
-                  </span>
+
+            <div className="p-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-16">
+                  <div className="text-5xl mb-3 opacity-50">🛒</div>
+                  <p className="text-stone-400 text-sm">
+                    Keranjang masih kosong
+                  </p>
                 </div>
-              ))}
+              ) : (
+                <>
+                  <div className="space-y-3 mb-5 max-h-80 overflow-y-auto">
+                    {cart.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex justify-between items-center bg-stone-50 p-3 rounded-lg"
+                      >
+                        <div className="flex-1">
+                          <h3 className="font-medium text-stone-800 text-sm">
+                            {item.menu.name}
+                          </h3>
+                          <p className="text-stone-500 text-xs">
+                            Rp {item.menu.price.toLocaleString()}
+                          </p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <button
+                              onClick={() => removeFromCart(item.menu.id)}
+                              className="bg-white border border-stone-300 w-6 h-6 rounded-full text-xs"
+                            >
+                              -
+                            </button>
+                            <span className="text-sm text-stone-700">
+                              {item.qty}
+                            </span>
+                            <button
+                              onClick={() => addToCart(item.menu)}
+                              className="bg-stone-800 text-white w-6 h-6 rounded-full text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <span className="font-medium text-stone-700 text-sm">
+                          Rp {(item.menu.price * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <input
+                      type="text"
+                      placeholder="Nama Anda"
+                      className="w-full p-2.5 rounded-lg bg-stone-50 border border-stone-200 focus:outline-none focus:border-stone-400 text-sm"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Nomor Meja"
+                      className="w-full p-2.5 rounded-lg bg-stone-50 border border-stone-200 focus:outline-none focus:border-stone-400 text-sm"
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="bg-stone-100 rounded-lg p-3 mb-4">
+                    <div className="flex justify-between">
+                      <span className="text-stone-600 text-sm">Total</span>
+                      <span className="font-semibold text-stone-800">
+                        Rp {totalPrice.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCheckout}
+                    className="w-full bg-stone-800 text-white py-3 rounded-lg font-medium hover:bg-stone-700 transition text-sm"
+                  >
+                    Konfirmasi Pesanan
+                  </button>
+                </>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <input
-                type="text"
-                placeholder="NAMA"
-                className="w-full p-4 rounded-2xl bg-zinc-100 border-none outline-none font-black text-xs uppercase"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-              />
-              <input
-                type="number"
-                placeholder="MEJA"
-                className="w-full p-4 rounded-2xl bg-zinc-100 border-none outline-none font-black text-xs uppercase"
-                value={tableNumber}
-                onChange={(e) => setTableNumber(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-between items-end pt-4">
-              <span className="text-zinc-400 font-bold text-[10px] uppercase">
-                Total Pembayaran
-              </span>
-              <span className="text-3xl font-black italic leading-none">
-                Rp {totalPrice.toLocaleString()}
-              </span>
-            </div>
-            <button
-              onClick={handleCheckout}
-              className="w-full bg-black text-white p-6 rounded-[30px] font-black italic tracking-[0.2em] text-sm"
-            >
-              KONFIRMASI PESANAN
-            </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

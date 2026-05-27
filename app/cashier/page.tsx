@@ -3,37 +3,37 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
-// 1. Definisi Interface untuk Item di Dalam Pesanan
 interface OrderItem {
+  id: number;
   qty: number;
   subtotal: number;
-  menu?: {
+  menu: {
+    id: number;
     name: string;
+    price: number;
   };
 }
 
-// 2. Definisi Interface Utama Objek Order dari Backend
 interface Order {
   id: number;
-  tableNumber: string | number;
+  tableNumber: string;
   customerName: string;
-  status: "PENDING" | "PAID" | string; // Sesuai enum backend kamu
+  status: string;
   total: number;
-  orderItems?: OrderItem[];
+  createdAt: string;
+  orderItems: OrderItem[];
 }
 
 export default function CashierPage() {
-  // Fix: Terapkan tipe Order[] pada useState untuk menghindari perangkap 'never[]'
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  // Fix: Bungkus fetchOrders dengan useCallback agar aman dimasukkan ke dependency array useEffect
   const fetchOrders = useCallback(async () => {
-    // Fix: Proteksi localStorage dari engine Server-Side Pre-rendering Next.js
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
     if (!token) {
       router.push("/login");
       return;
@@ -41,27 +41,42 @@ export default function CashierPage() {
 
     try {
       const res = await fetch(`${API_URL}/order`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+
+      // Tampilkan PENDING, PROCESS, DONE, CANCEL semua
+      const allOrders = Array.isArray(data) ? data : [];
+      setOrders(allOrders);
     } catch (error) {
       console.error("Gagal mengambil order:", error);
     } finally {
       setLoading(false);
     }
-  }, [router, API_URL]);
+  }, [API_URL, router]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOrders();
   }, [fetchOrders]);
 
-  const handleUpdateStatus = async (orderId: number) => {
+  const handleUpdateStatus = async (orderId: number, newStatus: string) => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+    if (!token) {
+      alert("Sesi habis, silakan login kembali.");
+      router.push("/login");
+      return;
+    }
+
+    let confirmMessage = "";
+    if (newStatus === "PROCESS") confirmMessage = "Proses pesanan ini?";
+    else if (newStatus === "DONE") confirmMessage = "Selesaikan pesanan ini?";
+    else if (newStatus === "CANCEL") confirmMessage = "Batalkan pesanan ini?";
+
+    if (!confirm(confirmMessage)) return;
+
     try {
       const res = await fetch(`${API_URL}/order/${orderId}`, {
         method: "PATCH",
@@ -69,131 +84,271 @@ export default function CashierPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ status: "PAID" }),
+        body: JSON.stringify({ status: newStatus }),
       });
 
       if (res.ok) {
-        alert("Pesanan berhasil diselesaikan!");
-        fetchOrders(); // Refresh data
+        alert(
+          `Pesanan ${newStatus === "PROCESS" ? "diproses" : newStatus === "DONE" ? "selesai" : "dibatalkan"}!`,
+        );
+        fetchOrders();
       } else {
-        alert("Gagal mengupdate status.");
+        const error = await res.json().catch(() => ({}));
+        alert(`Gagal: ${error.message || "Terjadi kesalahan"}`);
       }
     } catch (error) {
-      alert("Terjadi kesalahan server.");
+      console.error("Error:", error);
+      alert("Gagal koneksi.");
     }
   };
 
-  const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "PENDING":
+        return (
+          <span className="px-2 py-0.5 rounded-full text-xs bg-amber-50 text-amber-700">
+            Menunggu
+          </span>
+        );
+      case "PROCESS":
+        return (
+          <span className="px-2 py-0.5 rounded-full text-xs bg-sky-50 text-sky-700">
+            Diproses
+          </span>
+        );
+      case "DONE":
+        return (
+          <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700">
+            Selesai
+          </span>
+        );
+      case "CANCEL":
+        return (
+          <span className="px-2 py-0.5 rounded-full text-xs bg-rose-50 text-rose-600">
+            Dibatalkan
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded-full text-xs bg-stone-100 text-stone-600">
+            {status}
+          </span>
+        );
     }
-    router.push("/login");
   };
+
+  const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
+  const processOrders = orders.filter((o) => o.status === "PROCESS").length;
+  const completedOrders = orders.filter((o) => o.status === "DONE").length;
+  const cancelledOrders = orders.filter((o) => o.status === "CANCEL").length;
+  const totalRevenue = orders
+    .filter((o) => o.status === "DONE")
+    .reduce((sum, order) => sum + order.total, 0);
+
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-stone-500 text-sm">Memuat pesanan...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#F4F4F4] p-8 font-sans">
-      <header className="flex justify-between items-center mb-12">
-        <div>
-          <h1 className="text-3xl font-black italic tracking-tighter">
-            CASHIER PANEL
-          </h1>
-          <p className="text-zinc-400 text-xs font-bold uppercase tracking-widest">
-            Manajemen Pesanan Masuk
-          </p>
-        </div>
-        <button
-          onClick={handleLogout}
-          className="text-[10px] font-bold bg-white px-4 py-2 rounded-full shadow-sm hover:bg-red-50 hover:text-red-600 transition-all"
-        >
-          LOGOUT
-        </button>
-      </header>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="border-b border-stone-200 pb-4">
+        <h1 className="text-xl font-medium text-stone-700">Daftar Pesanan</h1>
+        <p className="text-stone-400 text-sm mt-1">Kelola pesanan yang masuk</p>
+      </div>
 
-      {loading ? (
-        <div className="text-center py-20 font-bold animate-pulse">
-          Memuat Pesanan...
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-xs text-stone-400">Menunggu</p>
+              <p className="text-2xl font-semibold text-stone-700 mt-1">
+                {pendingOrders}
+              </p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+              <span className="text-amber-600 text-sm">⏳</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-xs text-stone-400">Diproses</p>
+              <p className="text-2xl font-semibold text-stone-700 mt-1">
+                {processOrders}
+              </p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center">
+              <span className="text-sky-600 text-sm">🍳</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-xs text-stone-400">Selesai</p>
+              <p className="text-2xl font-semibold text-stone-700 mt-1">
+                {completedOrders}
+              </p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center">
+              <span className="text-emerald-600 text-sm">✅</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <p className="text-xs text-stone-400">Dibatalkan</p>
+              <p className="text-2xl font-semibold text-stone-700 mt-1">
+                {cancelledOrders}
+              </p>
+            </div>
+            <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center">
+              <span className="text-rose-600 text-sm">❌</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Total Pendapatan Bar */}
+      <div className="bg-stone-100 rounded-lg p-3 flex justify-between items-center">
+        <span className="text-sm text-stone-600">
+          Total Pendapatan (Selesai)
+        </span>
+        <span className="text-lg font-semibold text-stone-800">
+          Rp {totalRevenue.toLocaleString()}
+        </span>
+      </div>
+
+      {/* Orders Grid */}
+      {orders.length === 0 ? (
+        <div className="text-center py-16 bg-stone-50 rounded-xl border border-stone-100">
+          <div className="text-5xl mb-3 opacity-40">🍽️</div>
+          <p className="text-stone-400 text-sm">Belum ada pesanan</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {orders.map((order) => (
             <div
               key={order.id}
-              className="bg-white rounded-[40px] p-8 shadow-sm border border-zinc-100 flex flex-col justify-between space-y-6"
+              className={`bg-white rounded-xl border shadow-sm transition-all ${
+                order.status === "DONE" || order.status === "CANCEL"
+                  ? "opacity-75 border-stone-100"
+                  : "border-stone-100 hover:shadow"
+              }`}
             >
-              <div>
-                <div className="flex justify-between items-start mb-6">
+              {/* Header */}
+              <div className="p-4 border-b border-stone-50">
+                <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em]">
-                      Meja {order.tableNumber}
-                    </p>
-                    <h3 className="text-xl font-bold">
-                      #{order.id} - {order.customerName}
-                    </h3>
-                  </div>
-                  <span
-                    className={`px-4 py-1 rounded-full text-[10px] font-black tracking-widest ${
-                      order.status === "PAID"
-                        ? "bg-green-100 text-green-600"
-                        : "bg-orange-100 text-orange-600"
-                    }`}
-                  >
-                    {order.status}
-                  </span>
-                </div>
-
-                {/* Daftar Items */}
-                <div className="space-y-3">
-                  <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest border-b pb-2">
-                    Pesanan:
-                  </p>
-                  {order.orderItems?.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between text-sm italic"
-                    >
-                      <span className="text-zinc-600">
-                        {item.qty}x{" "}
-                        <span className="font-bold not-italic">
-                          {item.menu?.name}
-                        </span>
-                      </span>
-                      <span className="font-medium">
-                        Rp {item.subtotal?.toLocaleString()}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs text-stone-400">
+                        Meja {order.tableNumber}
                       </span>
                     </div>
-                  ))}
+                    <h3 className="text-base font-medium text-stone-800">
+                      {order.customerName}
+                    </h3>
+                    <span className="text-xs text-stone-400">
+                      Order #{order.id}
+                    </span>
+                  </div>
+                  {getStatusBadge(order.status)}
                 </div>
               </div>
 
-              <div className="pt-6 border-t flex justify-between items-center">
-                <div>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                    Total Tagihan
-                  </p>
-                  <p className="font-black text-2xl tracking-tighter italic">
-                    Rp {order.total?.toLocaleString()}
-                  </p>
+              {/* Order Items */}
+              <div className="p-4 space-y-2">
+                <p className="text-xs text-stone-400">Item pesanan</p>
+                {order.orderItems?.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex justify-between items-center text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-stone-400">{item.qty}x</span>
+                      <span className="text-stone-600">
+                        {item.menu?.name || "Menu"}
+                      </span>
+                    </div>
+                    <span className="text-stone-500">
+                      Rp {item.subtotal?.toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer & Actions */}
+              <div className="p-4 border-t border-stone-50">
+                <div className="flex justify-between items-center mb-3">
+                  <div>
+                    <p className="text-xs text-stone-400">Total tagihan</p>
+                    <p className="text-base font-semibold text-stone-700">
+                      Rp {order.total?.toLocaleString()}
+                    </p>
+                  </div>
                 </div>
 
-                {order.status !== "PAID" && (
-                  <button
-                    onClick={() => handleUpdateStatus(order.id)}
-                    className="bg-black text-white px-6 py-3 rounded-full text-[10px] font-black tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-lg"
-                  >
-                    SELESAIKAN
-                  </button>
-                )}
+                {/* Tombol Aksi berdasarkan status */}
+                <div className="flex gap-2">
+                  {order.status === "PENDING" && (
+                    <>
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, "PROCESS")}
+                        className="flex-1 bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-sky-700 transition"
+                      >
+                        Proses
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, "CANCEL")}
+                        className="flex-1 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-rose-600 transition"
+                      >
+                        Batalkan
+                      </button>
+                    </>
+                  )}
+
+                  {order.status === "PROCESS" && (
+                    <>
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, "DONE")}
+                        className="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 transition"
+                      >
+                        Selesai
+                      </button>
+                      <button
+                        onClick={() => handleUpdateStatus(order.id, "CANCEL")}
+                        className="flex-1 bg-rose-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-rose-600 transition"
+                      >
+                        Batalkan
+                      </button>
+                    </>
+                  )}
+
+                  {(order.status === "DONE" || order.status === "CANCEL") && (
+                    <div className="w-full text-center text-xs text-stone-400 py-1.5">
+                      {order.status === "DONE"
+                        ? "✓ Pesanan selesai"
+                        : "✗ Pesanan dibatalkan"}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {orders.length === 0 && !loading && (
-        <div className="text-center py-20 bg-zinc-100 rounded-[40px] border-2 border-dashed">
-          <p className="text-zinc-400 font-bold uppercase tracking-widest">
-            Tidak ada pesanan aktif
-          </p>
         </div>
       )}
     </div>

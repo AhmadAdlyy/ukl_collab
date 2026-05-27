@@ -2,177 +2,452 @@
 
 import { useEffect, useState } from "react";
 
-// 1. Definisikan Interface untuk Data Stats Dashboard
+interface MenuItem {
+  id: number;
+  name: string;
+  price: number;
+}
+
+interface Category {
+  id: number;
+  name: string;
+}
+
+interface OrderItem {
+  id: number;
+  qty: number;
+  subtotal: number;
+  menuId: number;
+}
+
+interface Order {
+  id: number;
+  customerName: string;
+  tableNumber: string;
+  status: string;
+  total: number;
+  createdAt: string;
+  orderItems: OrderItem[];
+}
+
 interface DashboardStats {
   totalMenu: number;
   totalCategory: number;
   totalOrdersToday: number;
   totalIncomeToday: number;
+  averageOrderValue: number;
 }
 
-// 2. Definisikan Interface untuk Props StatCard
+interface ChartData {
+  date: string;
+  revenue: number;
+  orders: number;
+}
+
 interface StatCardProps {
   title: string;
   value: number;
   unit: string;
-  color: string;
+  icon?: string;
 }
 
 export default function AdminDashboardPage() {
-  // Fix: Terapkan tipe data interface pada useState
   const [stats, setStats] = useState<DashboardStats>({
     totalMenu: 0,
     totalCategory: 0,
     totalOrdersToday: 0,
     totalIncomeToday: 0,
+    averageOrderValue: 0,
   });
+  const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [greeting, setGreeting] = useState("");
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   useEffect(() => {
+    const hour = new Date().getHours();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (hour < 12) setGreeting("Selamat Pagi");
+    else if (hour < 18) setGreeting("Selamat Siang");
+    else setGreeting("Selamat Malam");
+  }, []);
+
+  useEffect(() => {
     const fetchData = async () => {
-      // Fix: Proteksi localStorage dari error SSR di lingkungan server Next.js
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
+      if (!token) {
+        setError("Token tidak ditemukan. Silakan login ulang.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
       try {
-        // Kita ambil data menu, kategori, dan report harian sekaligus
-        const [resMenu, resCat, resReport] = await Promise.all([
-          fetch(`${API_URL}/menu`),
-          fetch(`${API_URL}/category`),
-          fetch(`${API_URL}/order/report/daily`, {
+        const [resMenu, resCat, resOrder] = await Promise.all([
+          fetch(`${API_URL}/menu`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_URL}/category`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch(`${API_URL}/order`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
 
-        const menus = await resMenu.json();
-        const cats = await resCat.json();
-        const report = await resReport.json();
+        const menus: MenuItem[] = await resMenu.json();
+        const cats: Category[] = await resCat.json();
+        const orders: Order[] = await resOrder.json();
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const todayOrders: Order[] = Array.isArray(orders)
+          ? orders.filter((order: Order) => {
+              const orderDate = new Date(order.createdAt);
+              return orderDate >= today && order.status === "DONE";
+            })
+          : [];
+
+        const todayIncome: number = todayOrders.reduce(
+          (sum: number, order: Order) => sum + (order.total || 0),
+          0,
+        );
+        const todayCount: number = todayOrders.length;
+        const avgValue: number = todayCount > 0 ? todayIncome / todayCount : 0;
 
         setStats({
           totalMenu: Array.isArray(menus) ? menus.length : 0,
           totalCategory: Array.isArray(cats) ? cats.length : 0,
-          // Mengambil totalOrders dan totalIncome dari response report backend
-          totalOrdersToday: report?.totalOrders || 0,
-          totalIncomeToday: report?.totalIncome || 0,
+          totalOrdersToday: todayCount,
+          totalIncomeToday: todayIncome,
+          averageOrderValue: avgValue,
         });
+
+        // Buat data chart per hari (7 hari terakhir)
+        const doneOrders = Array.isArray(orders)
+          ? orders.filter((order: Order) => order.status === "DONE")
+          : [];
+
+        const last7Days = [];
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          date.setHours(0, 0, 0, 0);
+
+          const dayOrders = doneOrders.filter((order: Order) => {
+            const orderDate = new Date(order.createdAt);
+            return (
+              orderDate >= date &&
+              orderDate < new Date(date.getTime() + 86400000)
+            );
+          });
+
+          const dayRevenue = dayOrders.reduce(
+            (sum: number, order: Order) => sum + (order.total || 0),
+            0,
+          );
+
+          last7Days.push({
+            date: date.toLocaleDateString("id-ID", {
+              weekday: "short",
+              day: "numeric",
+            }),
+            revenue: dayRevenue,
+            orders: dayOrders.length,
+          });
+        }
+        setChartData(last7Days);
       } catch (error) {
         console.error("Error fetching dashboard stats:", error);
+        setError("Gagal memuat data dashboard.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [API_URL]); // Fix: Tambahkan API_URL ke dalam dependency array
+  }, []);
+
+  const formatCurrency = (value: number): string => {
+    return new Intl.NumberFormat("id-ID").format(value);
+  };
+
+  const maxRevenue = Math.max(...chartData.map((d) => d.revenue), 1);
+  const maxOrders = Math.max(...chartData.map((d) => d.orders), 1);
 
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <p className="animate-pulse font-bold italic text-zinc-400">
-          LOADING ANALYTICS...
-        </p>
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-stone-300 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-stone-500 text-sm">Memuat data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="text-center">
+          <p className="text-rose-600 mb-3 text-sm">⚠️ {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-stone-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-stone-800 transition"
+          >
+            Coba Lagi
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Header Dashboard */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-3xl font-black italic tracking-tighter uppercase">
-            Dashboard Overview
-          </h2>
-          <p className="text-zinc-500 text-sm">
-            Ringkasan performa restoran untuk hari ini.
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-            Pendapatan Hari Ini
-          </p>
-          <p className="text-xl font-black text-green-600 italic">
-            Rp {stats.totalIncomeToday.toLocaleString()}
-          </p>
-        </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="border-b border-stone-200 pb-5">
+        <h2 className="text-xl font-medium text-stone-700">
+          {greeting}, Administrator
+        </h2>
+        <p className="text-stone-400 text-sm mt-0.5">
+          Ringkasan performa restoran
+        </p>
       </div>
 
-      {/* Grid Statistik Ringkas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* 4 Kartu Statistik */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Menu"
           value={stats.totalMenu}
-          unit="Items"
-          color="bg-white"
+          unit="item"
+          icon="🍽️"
         />
         <StatCard
           title="Kategori"
           value={stats.totalCategory}
-          unit="Types"
-          color="bg-white"
+          unit="kategori"
+          icon="📁"
         />
         <StatCard
           title="Pesanan Hari Ini"
           value={stats.totalOrdersToday}
-          unit="Orders"
-          color="bg-black text-white"
+          unit="pesanan"
+          icon="📋"
+        />
+        <StatCard
+          title="Rata-rata Pesanan"
+          value={stats.averageOrderValue}
+          unit="Rp"
+          icon="💰"
         />
       </div>
 
-      {/* Visual Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
-        <div className="bg-white p-10 rounded-[40px] border border-zinc-100 shadow-sm flex flex-col items-center justify-center text-center space-y-4">
-          <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+      {/* Grafik Penjualan */}
+      {chartData.length > 0 && (
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <p className="text-xs font-medium text-stone-400 uppercase tracking-wider">
+                Grafik Penjualan
+              </p>
+              <p className="text-sm text-stone-600 mt-0.5">7 Hari Terakhir</p>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-emerald-600"></div>
+                <span className="text-stone-500">Pendapatan</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-sky-500"></div>
+                <span className="text-stone-500">Pesanan</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <p className="font-bold text-sm uppercase tracking-widest">
-              Grafik Penjualan
-            </p>
-            <p className="text-xs text-zinc-400 italic">
-              Menghubungkan ke Chart.js...
+
+          {/* Chart Bars */}
+          <div className="flex items-end justify-between gap-2 h-48">
+            {chartData.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex-1 flex flex-col items-center gap-2"
+              >
+                <div className="w-full flex flex-col items-center gap-1">
+                  {/* Revenue Bar */}
+                  <div
+                    className="w-full bg-emerald-100 rounded-t-sm transition-all duration-500"
+                    style={{
+                      height: `${(item.revenue / maxRevenue) * 100}px`,
+                      maxHeight: "120px",
+                      minHeight: "4px",
+                    }}
+                  >
+                    <div
+                      className="w-full bg-emerald-600 rounded-t-sm h-full"
+                      style={{
+                        height: `${(item.revenue / maxRevenue) * 100}%`,
+                        maxHeight: "120px",
+                      }}
+                    ></div>
+                  </div>
+                  {/* Orders Bar */}
+                  <div
+                    className="w-full bg-sky-100 rounded-t-sm"
+                    style={{
+                      height: `${(item.orders / maxOrders) * 50}px`,
+                      minHeight: "4px",
+                    }}
+                  >
+                    <div
+                      className="w-full bg-sky-500 rounded-t-sm h-full"
+                      style={{ height: `${(item.orders / maxOrders) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <span className="text-[10px] text-stone-400 whitespace-nowrap">
+                  {item.date}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Legend nilai pendapatan */}
+          <div className="flex justify-between text-[10px] text-stone-400 mt-4 pt-2 border-t border-stone-100">
+            <span>Rp 0</span>
+            <span>Rp {formatCurrency(Math.round(maxRevenue / 2))}</span>
+            <span>Rp {formatCurrency(maxRevenue)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Dua Kartu Bawah */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 pt-3">
+        {/* Info Menu */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-stone-100">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 bg-stone-100 rounded-lg flex items-center justify-center">
+              <span className="text-stone-500 text-lg">📋</span>
+            </div>
+            <div>
+              <p className="text-xs text-stone-400 uppercase tracking-wider">
+                Informasi
+              </p>
+              <p className="text-sm font-medium text-stone-700">Data Menu</p>
+            </div>
+          </div>
+          <p className="text-stone-600 text-sm leading-relaxed">
+            Total{" "}
+            <span className="font-semibold text-stone-800">
+              {stats.totalMenu}
+            </span>{" "}
+            menu tersedia dalam{" "}
+            <span className="font-semibold text-stone-800">
+              {stats.totalCategory}
+            </span>{" "}
+            kategori.
+          </p>
+          <div className="mt-3 pt-3 border-t border-stone-100">
+            <p className="text-xs text-stone-400">
+              Data terakhir: {new Date().toLocaleDateString("id-ID")}
             </p>
           </div>
         </div>
 
-        <div className="bg-zinc-900 p-10 rounded-[40px] text-white flex flex-col justify-between">
-          <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
-            Quick Tip
-          </p>
-          <h3 className="text-xl font-bold leading-tight mt-4">
-            &quot;Menu dengan kategori{" "}
-            <span className="text-yellow-400">Best Seller</span> memiliki
-            konversi 20% lebih tinggi minggu ini.&quot;
-          </h3>
-          <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-center">
-            <span className="text-[10px] font-bold opacity-50">
-              AI INSIGHTS
-            </span>
-            <button className="text-[10px] font-bold bg-white text-black px-4 py-2 rounded-full">
-              CEK DETAIL
-            </button>
+        {/* Performance */}
+        <div className="bg-stone-800 rounded-xl p-5 text-stone-100 shadow-sm">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 bg-stone-700 rounded-lg flex items-center justify-center">
+              <span className="text-stone-300 text-lg">📊</span>
+            </div>
+            <div>
+              <p className="text-xs text-stone-400 uppercase tracking-wider">
+                Ringkasan
+              </p>
+              <p className="text-sm font-medium">Hari Ini</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-2xl font-semibold">{stats.totalOrdersToday}</p>
+              <p className="text-xs text-stone-400">Pesanan selesai</p>
+            </div>
+            <div>
+              <p className="text-2xl font-semibold">
+                {formatCurrency(Math.round(stats.averageOrderValue))}
+              </p>
+              <p className="text-xs text-stone-400">Rata-rata pesanan</p>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-stone-700">
+            <p className="text-xs text-stone-400">
+              {stats.totalOrdersToday === 0
+                ? "Belum ada transaksi hari ini"
+                : `Pendapatan: Rp ${formatCurrency(stats.totalIncomeToday)}`}
+            </p>
           </div>
         </div>
+      </div>
+
+      {/* Pendapatan Hari Ini - Bar tambahan */}
+      {stats.totalOrdersToday > 0 && (
+        <div className="bg-stone-50 rounded-xl p-4 border border-stone-100">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-stone-600">
+              Total Pendapatan Hari Ini
+            </span>
+            <span className="text-xl font-semibold text-stone-800">
+              Rp {formatCurrency(stats.totalIncomeToday)}
+            </span>
+          </div>
+          <div className="mt-2 w-full bg-stone-200 rounded-full h-1.5">
+            <div
+              className="bg-stone-600 h-1.5 rounded-full"
+              style={{
+                width: `${Math.min((stats.totalIncomeToday / 2000000) * 100, 100)}%`,
+              }}
+            ></div>
+          </div>
+          <p className="text-xs text-stone-400 mt-2">Target: Rp 2.000.000</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// StatCard Component
+function StatCard({ title, value, unit, icon }: StatCardProps) {
+  const displayValue = unit === "Rp" ? formatCurrency(value) : value;
+
+  return (
+    <div className="bg-white rounded-xl p-4 shadow-sm border border-stone-100 hover:shadow-md transition-all">
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-xs font-medium text-stone-400 uppercase tracking-wider">
+            {title}
+          </p>
+          <p className="text-2xl font-semibold text-stone-700 mt-1">
+            {typeof displayValue === "number"
+              ? displayValue.toLocaleString()
+              : displayValue}
+          </p>
+          <p className="text-[10px] text-stone-400 mt-0.5">{unit}</p>
+        </div>
+        {icon && (
+          <div className="w-8 h-8 bg-stone-50 rounded-lg flex items-center justify-center border border-stone-100">
+            <span className="text-stone-500 text-base">{icon}</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Fix: Definisikan props secara gamblang dengan interface StatCardProps (bebas dari 'any')
-function StatCard({ title, value, unit, color }: StatCardProps) {
-  return (
-    <div
-      className={`${color} p-8 rounded-[40px] border border-zinc-100 shadow-sm transition-all hover:shadow-xl hover:-translate-y-1`}
-    >
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">
-        {title}
-      </p>
-      <div className="flex items-baseline gap-2">
-        <h3 className="text-4xl font-black italic tracking-tighter">{value}</h3>
-        <span className="text-xs font-bold opacity-40 uppercase">{unit}</span>
-      </div>
-    </div>
-  );
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("id-ID").format(Math.round(value));
 }
