@@ -241,9 +241,9 @@ export default function UserMenuPage() {
                 {" "}
                 {/* ← tambahkan relative */}
                 <span className="text-lg">🛒</span>
-                {totalItems > 0 && (
+                {totalPrice > 0 && (
                   <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-lg">
-                    {totalItems}
+                    {totalPrice}
                   </span>
                 )}
                 <span className="hidden sm:inline text-sm font-medium">
