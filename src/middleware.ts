@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Fungsi pembantu untuk decode JWT di sisi server (Edge Runtime) secara aman
+// Fungsi pembantu: Aman dari pembatasan Node.js Buffer di Vercel Edge Runtime
 function decodeJwtRole(token: string): string {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return "";
 
-    // Decode base64 tanpa atob (karena atob kadang bermasalah di Edge Runtime)
-    const payloadBuffer = Buffer.from(parts[1], "base64");
-    const payload = JSON.parse(payloadBuffer.toString("utf-8"));
+    // Normalisasi base64 url ke standard base64
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
 
+    // Decode menggunakan atob bawaan yang aman di Edge Runtime
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(""),
+    );
+
+    const payload = JSON.parse(jsonPayload);
     const role = payload.role || payload.Role || payload.status || "";
     return role.toString().toUpperCase().trim();
   } catch {
@@ -19,7 +28,7 @@ function decodeJwtRole(token: string): string {
 }
 
 export function middleware(request: NextRequest) {
-  // 1. PERBAIKAN UTAMA: Ambil .value dari cookie agar mendapatkan string token asli
+  // Mengambil string token asli dari Cookie
   const token = request.cookies.get("token")?.value;
 
   const { pathname } = request.nextUrl;
@@ -27,12 +36,12 @@ export function middleware(request: NextRequest) {
   const isAdminPage = pathname.startsWith("/admin");
   const isCashierPage = pathname.startsWith("/cashier");
 
-  // 2. PROTEKSI: Jika mencoba akses halaman terproteksi TANPA token
+  // 1. Proteksi URL: Jika coba masuk /admin atau /cashier TANPA login
   if ((isAdminPage || isCashierPage) && !token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // 3. BONUS PROTEKSI URL: Jika SUDAH login tapi iseng ngetik /login di URL
+  // 2. Proteksi URL balik: Jika SUDAH login tapi iseng ngetik /login di URL
   if (isAuthPage && token) {
     const userRole = decodeJwtRole(token);
 
@@ -46,7 +55,7 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Hanya jalankan middleware pada halaman admin, cashier, dan login
 export const config = {
+  // Jalankan satpam middleware ini hanya pada rute-rute di bawah
   matcher: ["/admin/:path*", "/cashier/:path*", "/login"],
 };
