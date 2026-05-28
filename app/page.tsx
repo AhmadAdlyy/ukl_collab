@@ -116,17 +116,11 @@ export default function UserMenuPage() {
     const orderData = {
       customerName: customerName.trim(),
       tableNumber: String(tableNumber).trim(),
-
-      total: cart.reduce((sum, item) => sum + item.menu.price * item.qty, 0),
-
+      total: totalPrice,
       paymentMethod,
-
-      // biarkan backend yang set default
-      // JANGAN kirim undefined field biar tidak error Prisma
       items: cart.map((item) => ({
         menuId: item.menu.id,
         qty: item.qty,
-        subtotal: item.menu.price * item.qty,
       })),
     };
 
