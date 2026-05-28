@@ -115,12 +115,15 @@ export default function UserMenuPage() {
     // Jika backend meminta Integer, maka "05" harus diubah menjadi 5.
     const orderData = {
       customerName: customerName.trim(),
-      tableNumber: tableNumber,
+      tableNumber: String(tableNumber).trim(),
       paymentMethod,
+      total: cart.reduce((sum, item) => sum + item.menu.price * item.qty, 0),
+
       items: cart.map((item) => ({
         menuId: item.menu.id,
         qty: item.qty,
         price: item.menu.price,
+        subtotal: item.menu.price * item.qty,
       })),
     };
 
