@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+// Definisi interface untuk struktur token payload yang aman
+interface JWTPayload {
+  role?: string;
+  Role?: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -27,43 +35,88 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      if (res.ok) {
-        localStorage.setItem("token", data.access_token);
-
-        const rawRole = data.role || data.user?.role || data.user?.Role || "";
-        const userRole = rawRole.toString().toUpperCase().trim();
-
-        if (userRole === "ADMIN") {
-          router.push("/admin");
-        } else if (
-          userRole === "CASHIR" ||
-          userRole === "CASHIER" ||
-          userRole === "KASIR"
-        ) {
-          router.push("/cashier");
-        } else {
-          try {
-            const payloadBase64 = data.access_token.split(".")[1];
-            const decodedPayload = JSON.parse(atob(payloadBase64));
-            const tokenRole = (decodedPayload.role || decodedPayload.Role || "")
-              .toString()
-              .toUpperCase()
-              .trim();
-
-            if (tokenRole === "ADMIN") {
-              router.push("/admin");
-            } else {
-              router.push("/cashier");
-            }
-          } catch {
-            router.push("/cashier");
-          }
-        }
-      } else {
+      // Jika status code bukan 2xx (misal 400, 401, 500)
+      if (!res.ok) {
         setError(data.message || "Username atau password salah");
+        setLoading(false);
+        return;
       }
-    } catch {
-      setError("Gagal terhubung ke server");
+
+      // Ambil token dengan mengantisipasi variasi nama properti dari API
+      const token = data.access_token || data.token || data.data?.token;
+      if (!token || typeof token !== "string") {
+        setError("Login berhasil, tetapi token tidak ditemukan dari server.");
+        setLoading(false);
+        return;
+      }
+
+      // Simpan ke localStorage
+      localStorage.setItem("token", token);
+
+      // Ambil role langsung dari response body (antisipasi nested object)
+      const rawRole =
+        data.role ||
+        data.user?.role ||
+        data.user?.Role ||
+        data.data?.role ||
+        "";
+      let userRole = rawRole.toString().toUpperCase().trim();
+
+      // Jika role tidak ada di body, bongkar payload JWT secara aman
+      if (!userRole) {
+        try {
+          const tokenParts = token.split(".");
+          if (tokenParts.length === 3) {
+            // Normalisasi base64 agar aman dari karakter khusus di production browser
+            const payloadBase64 = tokenParts[1]
+              .replace(/-/g, "+")
+              .replace(/_/g, "/");
+            const decodedPayload = JSON.parse(
+              decodeURIComponent(
+                atob(payloadBase64)
+                  .split("")
+                  .map(
+                    (c) =>
+                      "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2),
+                  )
+                  .join(""),
+              ),
+            ) as JWTPayload;
+
+            const tokenRole =
+              decodedPayload.role ||
+              decodedPayload.Role ||
+              decodedPayload.status ||
+              "";
+            userRole = tokenRole.toString().toUpperCase().trim();
+          }
+        } catch (jwtError) {
+          console.error("Gagal membaca JWT payload:", jwtError);
+        }
+      }
+
+      // Proses Navigasi berdasarkan Role
+      if (userRole === "ADMIN") {
+        router.push("/admin");
+      } else if (
+        userRole === "CASHIR" ||
+        userRole === "CASHIER" ||
+        userRole === "KASIR"
+      ) {
+        router.push("/cashier");
+      } else {
+        setError(
+          `Role tidak dikenali ("${userRole || "KOSONG"}"). Tidak dapat mengalihkan halaman.`,
+        );
+      }
+    } catch (err) {
+      console.error("Error Sistem:", err);
+      // Pengecekan tipe error secara aman tanpa 'any'
+      if (err instanceof Error) {
+        setError(`Terjadi kesalahan: ${err.message}`);
+      } else {
+        setError("Gagal terhubung ke server");
+      }
     } finally {
       setLoading(false);
     }
@@ -88,7 +141,7 @@ export default function LoginPage() {
         {/* Form */}
         <form onSubmit={handleLogin} className="p-6 pt-4 space-y-4">
           {error && (
-            <div className="text-sm text-rose-600 bg-rose-50 px-3 py-2 rounded-lg">
+            <div className="text-sm text-rose-600 bg-rose-50 px-3 py-2 rounded-lg break-words">
               {error}
             </div>
           )}
