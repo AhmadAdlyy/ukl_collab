@@ -433,6 +433,7 @@ export default function CashierPage() {
                 </div>
 
                 <div className="flex gap-2">
+                  {/* Kasus 1: Pesanan dari user (cashierId = null) dan PENDING */}
                   {order.cashierId === null && order.status === "PENDING" && (
                     <button
                       onClick={() => handleClaimOrder(order.id)}
@@ -441,7 +442,9 @@ export default function CashierPage() {
                       Ambil Pesanan
                     </button>
                   )}
-                  {order.status === "PENDING" && (
+
+                  {/* Kasus 2: Pesanan sudah diambil kasir dan PENDING */}
+                  {order.cashierId !== null && order.status === "PENDING" && (
                     <>
                       <button
                         onClick={() => handleUpdateStatus(order.id, "PROCESS")}
@@ -458,13 +461,14 @@ export default function CashierPage() {
                     </>
                   )}
 
+                  {/* Kasus 3: Status PROCESS - langsung selesai tanpa bayar */}
                   {order.status === "PROCESS" && (
                     <>
                       <button
-                        onClick={() => handlePayment(order)}
-                        className="flex-1 bg-stone-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-700 transition"
+                        onClick={() => handleUpdateStatus(order.id, "DONE")}
+                        className="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 transition"
                       >
-                        Bayar
+                        Selesai
                       </button>
                       <button
                         onClick={() => handleUpdateStatus(order.id, "CANCEL")}
@@ -475,6 +479,7 @@ export default function CashierPage() {
                     </>
                   )}
 
+                  {/* Kasus 4: Status DONE atau CANCEL */}
                   {(order.status === "DONE" || order.status === "CANCEL") && (
                     <div className="w-full text-center text-xs text-stone-400 py-1.5">
                       {order.status === "DONE"
