@@ -431,16 +431,15 @@ export default function CashierPage() {
                   </div>
                 </div>
 
-                {order.cashierId === null && order.status === "PENDING" && (
-                  <button
-                    onClick={() => handleClaimOrder(order.id)}
-                    className="flex-1 bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-600 transition"
-                  >
-                    Ambil Pesanan
-                  </button>
-                )}
-                
                 <div className="flex gap-2">
+                  {order.cashierId === null && order.status === "PENDING" && (
+                    <button
+                      onClick={() => handleClaimOrder(order.id)}
+                      className="flex-1 bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-600 transition"
+                    >
+                      Ambil Pesanan
+                    </button>
+                  )}
                   {order.status === "PENDING" && (
                     <>
                       <button
