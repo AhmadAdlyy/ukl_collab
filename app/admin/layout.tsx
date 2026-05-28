@@ -4,6 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function AdminLayout({
   children,
 }: {
@@ -14,22 +23,29 @@ export default function AdminLayout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // Membaca token dari Cookie, bukan lagi localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
-      router.push("/login");
+      window.location.href = "/login";
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
     }
-  }, [router]);
+  }, [pathname]); // Dipicu ulang setiap kali pindah halaman agar satpam client tetap siaga
 
   const handleLogout = () => {
+    // Menghapus token dari Cookie secara total dengan memundurkan tanggal expired
+    document.cookie =
+      "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict; Secure";
+
+    // Hapus juga localStorage lama jika masih tersisa agar bersih total
     if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
+      localStorage.clear();
     }
-    router.push("/login");
+
+    // Lempar langsung ke halaman login menggunakan window.location agar state terefresh total
+    window.location.href = "/login";
   };
 
   if (loading) {
@@ -58,7 +74,7 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-stone-100">
-      {/* Sidebar - netral, tidak gradien */}
+      {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-stone-200 shadow-sm z-20 flex flex-col">
         {/* Logo */}
         <div className="p-5 border-b border-stone-100">
@@ -73,7 +89,7 @@ export default function AdminLayout({
           </div>
         </div>
 
-        {/* Navigation - simpel */}
+        {/* Navigation */}
         <nav className="flex-1 p-3 space-y-0.5">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
@@ -108,7 +124,7 @@ export default function AdminLayout({
 
       {/* Main Content */}
       <div className="flex-1 ml-64">
-        {/* Header - simpel, tidak gradien */}
+        {/* Header */}
         <header className="bg-white border-b border-stone-200 sticky top-0 z-10">
           <div className="px-6 py-3 flex items-center justify-between">
             <div>

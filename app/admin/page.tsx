@@ -51,6 +51,15 @@ interface StatCardProps {
   icon?: string;
 }
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client (Client-Side Cookie Reader)
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     totalMenu: 0,
@@ -76,12 +85,14 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      // PERBAIKAN: Membaca token dari Cookie, bukan lagi LocalStorage
+      const token = getCookieClient("token");
 
       if (!token) {
         setError("Token tidak ditemukan. Silakan login ulang.");
         setLoading(false);
+        // Proteksi tambahan: jika token kosong, oper langsung ke login
+        window.location.href = "/login";
         return;
       }
 
@@ -100,6 +111,18 @@ export default function AdminDashboardPage() {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
+
+        // Validasi jika status token di-reject/expired oleh backend (401/403)
+        if (
+          resMenu.status === 401 ||
+          resCat.status === 401 ||
+          resOrder.status === 401
+        ) {
+          document.cookie =
+            "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict; Secure";
+          window.location.href = "/login";
+          return;
+        }
 
         const menus: MenuItem[] = await resMenu.json();
         const cats: Category[] = await resCat.json();
@@ -164,8 +187,8 @@ export default function AdminDashboardPage() {
           });
         }
         setChartData(last7Days);
-      } catch (error) {
-        console.error("Error fetching dashboard stats:", error);
+      } catch (err) {
+        console.error("Error fetching dashboard stats:", err);
         setError("Gagal memuat data dashboard.");
       } finally {
         setLoading(false);
@@ -174,10 +197,6 @@ export default function AdminDashboardPage() {
 
     fetchData();
   }, []);
-
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat("id-ID").format(value);
-  };
 
   const maxRevenue = Math.max(...chartData.map((d) => d.revenue), 1);
   const maxOrders = Math.max(...chartData.map((d) => d.orders), 1);

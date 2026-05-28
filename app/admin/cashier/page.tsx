@@ -2,24 +2,33 @@
 
 import { useState } from "react";
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function ManageCashierPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
-
   const OUTLET_ID = "975d46b0-fb2e-43ca-a8f1-445ba97dbf03";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // PERBAIKAN 1: Mengambil token dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
       alert("Anda belum login sebagai admin!");
+      window.location.href = "/login";
       setSubmitting(false);
       return;
     }
@@ -35,7 +44,7 @@ export default function ManageCashierPage() {
           username,
           password,
           outletId: OUTLET_ID,
-          role: "CASHIR",
+          role: "CASHIER", // PERBAIKAN 2: Typo dari "CASHIR" menjadi "CASHIER"
         }),
       });
 

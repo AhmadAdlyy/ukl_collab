@@ -19,6 +19,15 @@ interface Menu {
   };
 }
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function ManageMenuPage() {
   const [menus, setMenus] = useState<Menu[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -41,8 +50,8 @@ export default function ManageMenuPage() {
   const fetchMenus = useCallback(async () => {
     setLoading(true);
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      // PERBAIKAN 1: Membaca token dari Cookie
+      const token = getCookieClient("token");
       const res = await fetch(`${API_URL}/menu`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -76,7 +85,6 @@ export default function ManageMenuPage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
 
-      // PERBAIKAN: Proteksi ukuran gambar diubah dari 2MB menjadi 5MB
       if (file.size > 5 * 1024 * 1024) {
         alert("Ukuran gambar terlalu besar! Maksimal 5MB.");
         return;
@@ -106,9 +114,11 @@ export default function ManageMenuPage() {
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Hapus menu "${name}"?`)) return;
 
-    const token = localStorage.getItem("token");
+    // PERBAIKAN 2: Gunakan Cookie untuk validasi delete
+    const token = getCookieClient("token");
     if (!token) {
       alert("Anda belum login sebagai admin!");
+      window.location.href = "/login";
       return;
     }
 
@@ -145,10 +155,13 @@ export default function ManageMenuPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+
+    // PERBAIKAN 3: Gunakan Cookie untuk submit data baru / patch
+    const token = getCookieClient("token");
 
     if (!token) {
       alert("Anda belum login sebagai admin!");
+      window.location.href = "/login";
       return;
     }
 
@@ -190,7 +203,8 @@ export default function ManageMenuPage() {
   };
 
   const getImageUrl = (imagePath: string) => {
-    if (!imagePath) return "https://placehold.co/100x100?text=No+Image";
+    if (!imagePath || imagePath.trim() === "")
+      return "https://placehold.co/100x100?text=No+Image";
     return imagePath;
   };
 
@@ -402,8 +416,9 @@ export default function ManageMenuPage() {
                 </div>
               </div>
               <div className="flex justify-between items-center p-4 pt-0 border-t border-stone-100 mt-2">
+                {/* PERBAIKAN 4: Format lokal Indonesia untuk harga */}
                 <p className="text-base font-semibold text-stone-700">
-                  Rp {Number(menu.price).toLocaleString()}
+                  Rp {Number(menu.price).toLocaleString("id-ID")}
                 </p>
                 <div className="flex gap-2">
                   <button

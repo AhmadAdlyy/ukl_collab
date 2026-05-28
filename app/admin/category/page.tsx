@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 interface Category {
   id: number;
   name: string;
 }
+
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
 
 export default function CategoryPage() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -18,7 +27,8 @@ export default function CategoryPage() {
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
-  const fetchCategories = async () => {
+  // PERBAIKAN 1: Membungkus fungsi dengan useCallback agar aman dari infinite re-render
+  const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`${API_URL}/category`);
@@ -35,12 +45,12 @@ export default function CategoryPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCategories();
-  }, []);
+  }, [fetchCategories]);
 
   const openModal = (cat?: Category) => {
     if (cat) {
@@ -57,10 +67,13 @@ export default function CategoryPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+
+    // PERBAIKAN 2: Mengambil token dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
-      alert("Anda belum login!");
+      alert("Anda belum login! Sesi tidak ditemukan.");
+      window.location.href = "/login";
       return;
     }
 
@@ -89,20 +102,24 @@ export default function CategoryPage() {
         setCategoryName("");
         fetchCategories();
       } else {
-        alert("Gagal menyimpan kategori.");
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Gagal: ${errorData.message || "Gagal menyimpan kategori."}`);
       }
     } catch (error) {
-      alert("Terjadi kesalahan.");
+      console.error("Submit error:", error);
+      alert("Terjadi kesalahan koneksi.");
     }
   };
 
   const handleDelete = async (id: number, name: string) => {
     if (!confirm(`Hapus kategori "${name}"?`)) return;
 
-    const token = localStorage.getItem("token");
+    // PERBAIKAN 3: Mengambil token dari Cookie untuk fungsi Hapus
+    const token = getCookieClient("token");
 
     if (!token) {
-      alert("Anda belum login!");
+      alert("Anda belum login! Sesi tidak ditemukan.");
+      window.location.href = "/login";
       return;
     }
 
@@ -116,10 +133,12 @@ export default function CategoryPage() {
         alert("Kategori berhasil dihapus!");
         fetchCategories();
       } else {
-        alert("Gagal menghapus kategori.");
+        const errorData = await res.json().catch(() => ({}));
+        alert(`Gagal: ${errorData.message || "Gagal menghapus kategori."}`);
       }
     } catch (error) {
-      alert("Terjadi kesalahan.");
+      console.error("Delete error:", error);
+      alert("Terjadi kesalahan koneksi.");
     }
   };
 

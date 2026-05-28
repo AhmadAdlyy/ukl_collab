@@ -16,7 +16,7 @@ interface ReportOrder {
   status: string;
   date: string;
   time: string;
-  cashier: string; // ← SUDAH ADA
+  cashier: string;
   items: ReportItem[];
 }
 
@@ -41,7 +41,7 @@ interface BackendReportOrder {
   status: string;
   date: string;
   time: string;
-  cashier: string; // ← PASTIKAN BACKEND KIRIM INI
+  cashier: string;
   items: BackendReportItem[];
 }
 
@@ -53,6 +53,15 @@ interface BackendReportResponse {
 }
 
 type ReportType = "daily" | "weekly" | "monthly" | "yearly";
+
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
 
 export default function ReportsPage() {
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -73,11 +82,13 @@ export default function ReportsPage() {
     setLoading(true);
     setError("");
 
-    const token = localStorage.getItem("token");
+    // PERBAIKAN UTAMA: Membaca token dari Cookie, bukan lagi localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
       setError("Token tidak ditemukan. Silakan login ulang.");
       setLoading(false);
+      window.location.href = "/login";
       return;
     }
 
@@ -86,12 +97,19 @@ export default function ReportsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      // Validasi jika token kedaluwarsa atau ditolak oleh backend (401/403)
+      if (res.status === 401 || res.status === 403) {
+        document.cookie =
+          "token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Strict; Secure";
+        window.location.href = "/login";
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
 
       const data: BackendReportResponse = await res.json();
-      console.log("Data dari API:", data); // CEK APAKAH ADA CASHIER
 
       const normalized: ReportData = {
         type: data.type,
@@ -105,7 +123,7 @@ export default function ReportsPage() {
           status: order.status,
           date: order.date,
           time: order.time,
-          cashier: order.cashier || "Sistem", // ← TAMPILKAN KASIR
+          cashier: order.cashier || "Sistem",
           items: (order.items ?? []).map((item: BackendReportItem) => ({
             menu: item.menu,
             qty: item.qty,
@@ -159,7 +177,7 @@ export default function ReportsPage() {
   if (error) {
     return (
       <div className="flex h-96 flex-col items-center justify-center gap-4">
-        <p className="text-rose-600 text-sm">{error}</p>
+        <p className="text-rose-600 text-sm">⚠️ {error}</p>
         <button
           onClick={fetchReport}
           className="bg-stone-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-stone-700 transition"
@@ -205,7 +223,7 @@ export default function ReportsPage() {
             Total Pendapatan ({getPeriodLabel()})
           </p>
           <p className="text-2xl font-semibold mt-1">
-            Rp {reportData?.totalIncome?.toLocaleString() || "0"}
+            Rp {reportData?.totalIncome?.toLocaleString("id-ID") || "0"}
           </p>
         </div>
 
@@ -284,7 +302,7 @@ export default function ReportsPage() {
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right font-semibold text-stone-700">
-                      Rp {order.total.toLocaleString()}
+                      Rp {order.total.toLocaleString("id-ID")}
                     </td>
                   </tr>
                 ))}
