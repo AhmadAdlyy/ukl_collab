@@ -100,7 +100,7 @@ export default function UserMenuPage() {
   const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const handleCheckout = async () => {
-    if (customerName.trim() === "" || tableNumber.trim() === "") {
+    if (customerName.trim() === "" || tableNumber === "") {
       alert("Nama dan Nomor Meja wajib diisi!");
       return;
     }
@@ -115,7 +115,7 @@ export default function UserMenuPage() {
     // Jika backend meminta Integer, maka "05" harus diubah menjadi 5.
     const orderData = {
       customerName: customerName.trim(),
-      tableNumber: String(tableNumber.trim()),
+      tableNumber: Number(tableNumber),
       paymentMethod,
       items: cart.map((item) => ({
         menuId: item.menu.id,
