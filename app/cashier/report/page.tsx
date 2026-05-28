@@ -64,12 +64,9 @@ export default function ReportPage() {
 
       if (Array.isArray(data)) {
         const doneOrders = data.filter(
-          (o) =>
-            o.status === "DONE" ||
-            o.status === "COMPLETED" ||
-            o.status === "PAID" ||
-            o.status === "PROCESSING",
+          (o) => o.status === "COMPLETED", // ← hanya COMPLETED yang dianggap selesai
         );
+
         const totalRevenue = doneOrders.reduce(
           (sum, o) => sum + (o.total || 0),
           0,
