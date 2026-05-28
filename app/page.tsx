@@ -491,7 +491,7 @@ export default function UserMenuPage() {
                       placeholder="Nomor / Kode Meja (Contoh: 05 atau 12)"
                       className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:border-orange-400 focus:bg-white transition text-sm shadow-inner"
                       value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value)}
+                      onChange={(e) => setTableNumber(String(e.target.value))}
                     />
                   </div>
 
