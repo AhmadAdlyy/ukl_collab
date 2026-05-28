@@ -134,7 +134,7 @@ export default function AdminDashboardPage() {
         const todayOrders: Order[] = Array.isArray(orders)
           ? orders.filter((order: Order) => {
               const orderDate = new Date(order.createdAt);
-              return orderDate >= today && order.status === "DONE";
+              return orderDate >= today;
             })
           : [];
 
