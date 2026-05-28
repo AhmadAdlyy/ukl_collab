@@ -121,9 +121,8 @@ export default function UserMenuPage() {
 
       paymentMethod,
 
-      // optional tapi aman kalau backend pakai default
-      paymentStatus: "UNPAID",
-
+      // biarkan backend yang set default
+      // JANGAN kirim undefined field biar tidak error Prisma
       items: cart.map((item) => ({
         menuId: item.menu.id,
         qty: item.qty,
