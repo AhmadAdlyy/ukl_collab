@@ -129,7 +129,8 @@ export default function CashierPage() {
     if (!confirm(confirmMessage)) return;
 
     try {
-      const res = await fetch(`${API_URL}/order/${orderId}`, {
+      // ✅ PERBAIKAN: Tambahkan /status di akhir URL
+      const res = await fetch(`${API_URL}/order/${orderId}/status`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
