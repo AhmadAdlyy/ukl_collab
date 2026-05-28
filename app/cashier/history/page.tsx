@@ -23,6 +23,15 @@ interface Order {
   orderItems: OrderItem[];
 }
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function HistoryPage() {
   const [history, setHistory] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +39,8 @@ export default function HistoryPage() {
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   const fetchHistory = useCallback(async () => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // PERBAIKAN 1: Membaca token dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
       setLoading(false);
@@ -91,7 +100,7 @@ export default function HistoryPage() {
 
   const totalRevenue = history
     .filter((o) => o.status === "DONE")
-    .reduce((sum, order) => sum + order.total, 0);
+    .reduce((sum, order) => sum + (order.total || 0), 0);
 
   if (loading) {
     return (
@@ -123,7 +132,8 @@ export default function HistoryPage() {
             Total Pendapatan
           </p>
           <p className="text-xl font-semibold text-stone-800">
-            Rp {totalRevenue.toLocaleString()}
+            {/* PERBAIKAN 2: Mengunci format mata uang lokal Indonesia */}
+            Rp {totalRevenue.toLocaleString("id-ID")}
           </p>
         </div>
       </div>
@@ -173,7 +183,8 @@ export default function HistoryPage() {
                       Meja {order.tableNumber}
                     </td>
                     <td className="px-5 py-3 text-sm font-medium text-stone-700">
-                      Rp {order.total?.toLocaleString()}
+                      {/* PERBAIKAN 3: Mengunci format mata uang pada baris data */}
+                      Rp {(order.total || 0).toLocaleString("id-ID")}
                     </td>
                     <td className="px-5 py-3">
                       {getStatusBadge(order.status)}

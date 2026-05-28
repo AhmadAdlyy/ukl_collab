@@ -4,6 +4,22 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
+// Fungsi pembantu untuk menghapus Cookie di sisi Client
+const deleteCookieClient = (name: string) => {
+  if (typeof document !== "undefined") {
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=strict;`;
+  }
+};
+
 export default function CashierLayout({
   children,
 }: {
@@ -14,8 +30,9 @@ export default function CashierLayout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // PERBAIKAN 1: Membaca token akses dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
+
     if (!token) {
       router.push("/login");
     } else {
@@ -25,9 +42,8 @@ export default function CashierLayout({
   }, [router]);
 
   const handleLogout = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
-    }
+    // PERBAIKAN 2: Menghapus token dari Cookie secara bersih
+    deleteCookieClient("token");
     router.push("/login");
   };
 

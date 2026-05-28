@@ -25,6 +25,15 @@ interface ChartData {
   orders: number;
 }
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function ReportPage() {
   const [stats, setStats] = useState<DailyStats>({
     totalRevenue: 0,
@@ -39,8 +48,8 @@ export default function ReportPage() {
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   const fetchStats = useCallback(async () => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // PERBAIKAN 1: Mengambil token dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
       setLoading(false);
@@ -62,12 +71,12 @@ export default function ReportPage() {
         );
         const totalOrders = doneOrders.length;
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // PERBAIKAN 2: Menggunakan toDateString() untuk komparasi tanggal hari ini yang lebih akurat
+        const todayStr = new Date().toDateString();
 
         const todayOrdersData = doneOrders.filter((order) => {
           const orderDate = new Date(order.createdAt);
-          return orderDate >= today;
+          return orderDate.toDateString() === todayStr;
         });
 
         const todayRevenue = todayOrdersData.reduce(
@@ -91,14 +100,11 @@ export default function ReportPage() {
         for (let i = 6; i >= 0; i--) {
           const date = new Date();
           date.setDate(date.getDate() - i);
-          date.setHours(0, 0, 0, 0);
+          const targetDateStr = date.toDateString();
 
           const dayOrders = doneOrders.filter((order) => {
             const orderDate = new Date(order.createdAt);
-            return (
-              orderDate >= date &&
-              orderDate < new Date(date.getTime() + 86400000)
-            );
+            return orderDate.toDateString() === targetDateStr;
           });
 
           const dayRevenue = dayOrders.reduce(
@@ -285,7 +291,7 @@ export default function ReportPage() {
                   <div
                     className="w-full bg-emerald-100 rounded-t-sm transition-all duration-500"
                     style={{
-                      height: `${(item.revenue / maxRevenue) * 100}px`,
+                      height: `${(item.revenue / maxRevenue) * 120}px`,
                       maxHeight: "120px",
                       minHeight: "4px",
                     }}
@@ -293,8 +299,7 @@ export default function ReportPage() {
                     <div
                       className="w-full bg-emerald-600 rounded-t-sm h-full"
                       style={{
-                        height: `${(item.revenue / maxRevenue) * 100}%`,
-                        maxHeight: "120px",
+                        height: "100%",
                       }}
                     ></div>
                   </div>
@@ -303,13 +308,14 @@ export default function ReportPage() {
                     className="w-full bg-sky-100 rounded-t-sm"
                     style={{
                       height: `${(item.orders / Math.max(...chartData.map((d) => d.orders), 1)) * 60}px`,
+                      maxHeight: "60px",
                       minHeight: "4px",
                     }}
                   >
                     <div
                       className="w-full bg-sky-500 rounded-t-sm h-full"
                       style={{
-                        height: `${(item.orders / Math.max(...chartData.map((d) => d.orders), 1)) * 100}%`,
+                        height: "100%",
                       }}
                     ></div>
                   </div>

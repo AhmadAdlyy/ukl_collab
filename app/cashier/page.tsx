@@ -26,19 +26,29 @@ interface Order {
   paymentStatus?: string;
 }
 
+// Fungsi pembantu untuk membaca Cookie di sisi Client
+const getCookieClient = (name: string): string | null => {
+  if (typeof document === "undefined") return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+  return null;
+};
+
 export default function CashierPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
-  const [cashAmount, setCashAmount] = useState(0);
+  // Perubahan tipe ke string | number untuk UX input yang lebih mulus
+  const [cashAmount, setCashAmount] = useState<number | "">("");
   const router = useRouter();
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   const fetchOrders = useCallback(async () => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    // PERBAIKAN 1: Membaca token akses dari Cookie, bukan localStorage
+    const token = getCookieClient("token");
 
     if (!token) {
       router.push("/login");
@@ -66,8 +76,7 @@ export default function CashierPage() {
   }, [fetchOrders]);
 
   const handleUpdateStatus = async (orderId: number, newStatus: string) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = getCookieClient("token");
 
     if (!token) {
       alert("Sesi habis, silakan login kembali.");
@@ -109,7 +118,8 @@ export default function CashierPage() {
 
   const handlePayment = async (order: Order) => {
     setSelectedOrder(order);
-    setCashAmount(order.total);
+    // PERBAIKAN 2: Memberikan nilai default kosong agar kasir lebih mudah mengetik nominal cash
+    setCashAmount("");
     setPaymentMethod("CASH");
     setShowPaymentModal(true);
   };
@@ -117,12 +127,18 @@ export default function CashierPage() {
   const confirmPayment = async () => {
     if (!selectedOrder) return;
 
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const token = getCookieClient("token");
 
     if (!token) {
       alert("Sesi habis, silakan login kembali.");
       router.push("/login");
+      return;
+    }
+
+    const finalAmount = cashAmount === "" ? 0 : cashAmount;
+
+    if (paymentMethod === "CASH" && finalAmount < selectedOrder.total) {
+      alert("Jumlah uang tunai yang dimasukkan kurang dari total tagihan.");
       return;
     }
 
@@ -135,7 +151,7 @@ export default function CashierPage() {
         },
         body: JSON.stringify({
           paymentMethod: paymentMethod,
-          amount: cashAmount,
+          amount: paymentMethod === "QRIS" ? selectedOrder.total : finalAmount,
         }),
       });
 
@@ -214,7 +230,9 @@ export default function CashierPage() {
     .filter((o) => o.status === "DONE")
     .reduce((sum, order) => sum + order.total, 0);
 
-  const change = cashAmount - (selectedOrder?.total || 0);
+  // Kalkulasi nilai kembalian uang tunai
+  const currentCashNum = cashAmount === "" ? 0 : cashAmount;
+  const change = currentCashNum - (selectedOrder?.total || 0);
 
   if (loading) {
     return (
@@ -484,11 +502,13 @@ export default function CashierPage() {
                   <p className="text-sm text-stone-600 mb-1">Jumlah Tunai</p>
                   <input
                     type="number"
+                    placeholder={`Contoh: ${selectedOrder.total}`}
                     className="w-full p-2 rounded-lg border border-stone-200 focus:outline-none focus:border-stone-400 text-sm"
                     value={cashAmount}
-                    onChange={(e) =>
-                      setCashAmount(parseInt(e.target.value) || 0)
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCashAmount(val === "" ? "" : parseInt(val) || 0);
+                    }}
                   />
                   {change > 0 && (
                     <div className="mt-2 p-2 bg-emerald-50 rounded-lg">
