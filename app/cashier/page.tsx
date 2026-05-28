@@ -22,11 +22,17 @@ interface Order {
   total: number;
   createdAt: string;
   orderItems: OrderItem[];
+  paymentMethod?: string;
+  paymentStatus?: string;
 }
 
 export default function CashierPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
+  const [cashAmount, setCashAmount] = useState(0);
   const router = useRouter();
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
@@ -45,7 +51,6 @@ export default function CashierPage() {
       });
       const data = await res.json();
 
-      // Tampilkan PENDING, PROCESS, DONE, CANCEL semua
       const allOrders = Array.isArray(data) ? data : [];
       setOrders(allOrders);
     } catch (error) {
@@ -102,6 +107,54 @@ export default function CashierPage() {
     }
   };
 
+  const handlePayment = async (order: Order) => {
+    setSelectedOrder(order);
+    setCashAmount(order.total);
+    setPaymentMethod("CASH");
+    setShowPaymentModal(true);
+  };
+
+  const confirmPayment = async () => {
+    if (!selectedOrder) return;
+
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+    if (!token) {
+      alert("Sesi habis, silakan login kembali.");
+      router.push("/login");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/order/${selectedOrder.id}/payment`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          paymentMethod: paymentMethod,
+          amount: cashAmount,
+        }),
+      });
+
+      if (res.ok) {
+        alert(
+          `Pembayaran ${paymentMethod === "CASH" ? "tunai" : "QRIS"} berhasil!`,
+        );
+        setShowPaymentModal(false);
+        fetchOrders();
+      } else {
+        const error = await res.json().catch(() => ({}));
+        alert(`Gagal: ${error.message || "Terjadi kesalahan"}`);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal koneksi.");
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "PENDING":
@@ -137,6 +190,22 @@ export default function CashierPage() {
     }
   };
 
+  const getPaymentBadge = (paymentMethod?: string, paymentStatus?: string) => {
+    if (!paymentMethod) return null;
+    if (paymentStatus === "PAID") {
+      return (
+        <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+          Lunas
+        </span>
+      );
+    }
+    return (
+      <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+        Belum bayar
+      </span>
+    );
+  };
+
   const pendingOrders = orders.filter((o) => o.status === "PENDING").length;
   const processOrders = orders.filter((o) => o.status === "PROCESS").length;
   const completedOrders = orders.filter((o) => o.status === "DONE").length;
@@ -144,6 +213,8 @@ export default function CashierPage() {
   const totalRevenue = orders
     .filter((o) => o.status === "DONE")
     .reduce((sum, order) => sum + order.total, 0);
+
+  const change = cashAmount - (selectedOrder?.total || 0);
 
   if (loading) {
     return (
@@ -266,7 +337,10 @@ export default function CashierPage() {
                       Order #{order.id}
                     </span>
                   </div>
-                  {getStatusBadge(order.status)}
+                  <div className="flex flex-col items-end gap-1">
+                    {getStatusBadge(order.status)}
+                    {getPaymentBadge(order.paymentMethod, order.paymentStatus)}
+                  </div>
                 </div>
               </div>
 
@@ -302,7 +376,6 @@ export default function CashierPage() {
                   </div>
                 </div>
 
-                {/* Tombol Aksi berdasarkan status */}
                 <div className="flex gap-2">
                   {order.status === "PENDING" && (
                     <>
@@ -324,10 +397,10 @@ export default function CashierPage() {
                   {order.status === "PROCESS" && (
                     <>
                       <button
-                        onClick={() => handleUpdateStatus(order.id, "DONE")}
-                        className="flex-1 bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-emerald-700 transition"
+                        onClick={() => handlePayment(order)}
+                        className="flex-1 bg-stone-800 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-700 transition"
                       >
-                        Selesai
+                        Bayar
                       </button>
                       <button
                         onClick={() => handleUpdateStatus(order.id, "CANCEL")}
@@ -350,6 +423,106 @@ export default function CashierPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && selectedOrder && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-50"
+            onClick={() => setShowPaymentModal(false)}
+          />
+          <div className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-xl z-50 p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-stone-800">Pembayaran</h3>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-stone-400 hover:text-stone-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-stone-600">Total Tagihan</p>
+                <p className="text-2xl font-semibold text-stone-800">
+                  Rp {selectedOrder.total.toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-stone-600 mb-2">Metode Pembayaran</p>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="CASH"
+                      checked={paymentMethod === "CASH"}
+                      onChange={() => setPaymentMethod("CASH")}
+                      className="w-4 h-4 accent-stone-800"
+                    />
+                    <span className="text-sm text-stone-700">Tunai</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="QRIS"
+                      checked={paymentMethod === "QRIS"}
+                      onChange={() => setPaymentMethod("QRIS")}
+                      className="w-4 h-4 accent-stone-800"
+                    />
+                    <span className="text-sm text-stone-700">QRIS</span>
+                  </label>
+                </div>
+              </div>
+
+              {paymentMethod === "CASH" && (
+                <div>
+                  <p className="text-sm text-stone-600 mb-1">Jumlah Tunai</p>
+                  <input
+                    type="number"
+                    className="w-full p-2 rounded-lg border border-stone-200 focus:outline-none focus:border-stone-400 text-sm"
+                    value={cashAmount}
+                    onChange={(e) =>
+                      setCashAmount(parseInt(e.target.value) || 0)
+                    }
+                  />
+                  {change > 0 && (
+                    <div className="mt-2 p-2 bg-emerald-50 rounded-lg">
+                      <p className="text-sm text-emerald-700">
+                        Kembalian: Rp {change.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {paymentMethod === "QRIS" && (
+                <div className="bg-stone-50 p-4 rounded-lg text-center">
+                  <div className="w-32 h-32 mx-auto bg-white border-2 border-stone-200 rounded-lg flex items-center justify-center mb-2">
+                    <span className="text-3xl">📱</span>
+                  </div>
+                  <p className="text-sm text-stone-600">
+                    Scan QR Code untuk membayar
+                  </p>
+                  <p className="text-xs text-stone-400 mt-1">
+                    Total: Rp {selectedOrder.total.toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={confirmPayment}
+                className="w-full bg-stone-800 text-white py-2.5 rounded-lg font-medium hover:bg-stone-700 transition text-sm"
+              >
+                Konfirmasi Pembayaran
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

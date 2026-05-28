@@ -7,7 +7,7 @@ interface MenuItem {
   name: string;
   description: string;
   price: number;
-  image: string;
+  image: string; // Menampung data string Base64 atau URL murni
   categoryId: number;
 }
 
@@ -31,6 +31,7 @@ export default function UserMenuPage() {
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
@@ -58,7 +59,7 @@ export default function UserMenuPage() {
     };
 
     fetchData();
-  }, []); // Dependency kosong, hanya fetch sekali
+  }, [API_URL]);
 
   const filteredMenus =
     selectedCategory === null
@@ -110,9 +111,11 @@ export default function UserMenuPage() {
     const orderData = {
       customerName,
       tableNumber,
+      paymentMethod,
       items: cart.map((item) => ({
         menuId: item.menu.id,
         qty: item.qty,
+        price: item.menu.price,
       })),
     };
 
@@ -124,7 +127,11 @@ export default function UserMenuPage() {
       });
 
       if (res.ok) {
-        alert("Pesanan berhasil! Sedang disiapkan.");
+        if (paymentMethod === "QRIS") {
+          alert("Silakan scan QR Code untuk menyelesaikan pembayaran");
+        } else {
+          alert("Pesanan berhasil! Silakan bayar ke kasir.");
+        }
         setCart([]);
         setIsCartOpen(false);
         setCustomerName("");
@@ -138,9 +145,18 @@ export default function UserMenuPage() {
     }
   };
 
+  // Fungsi getImageUrl yang aman untuk Base64 hasil upload dari halaman admin
   const getImageUrl = (imagePath: string) => {
-    if (!imagePath) return null;
-    if (imagePath.startsWith("http")) return imagePath;
+    if (!imagePath) return "https://placehold.co/400x300?text=No+Image";
+
+    if (
+      imagePath.startsWith("data:") ||
+      imagePath.startsWith("http://") ||
+      imagePath.startsWith("https://")
+    ) {
+      return imagePath;
+    }
+
     return `${API_URL}/uploads/${imagePath}`;
   };
 
@@ -191,7 +207,7 @@ export default function UserMenuPage() {
         <div className="max-w-7xl mx-auto px-4 text-center">
           <h1 className="text-3xl font-medium mb-1">savory.</h1>
           <p className="text-stone-400 text-sm">
-            Pesan langsung dari meja kamu
+            Pesanan langsung dari meja kamu
           </p>
         </div>
       </div>
@@ -238,12 +254,12 @@ export default function UserMenuPage() {
               {filteredMenus.map((menu) => (
                 <div
                   key={menu.id}
-                  className="bg-white rounded-lg border border-stone-200 hover:shadow-md transition"
+                  className="bg-white rounded-lg border border-stone-200 hover:shadow-md transition flex flex-col justify-between"
                 >
-                  <div className="h-40 w-full bg-stone-100 rounded-t-lg overflow-hidden">
-                    {menu.image ? (
+                  <div>
+                    <div className="h-40 w-full bg-stone-100 rounded-t-lg overflow-hidden">
                       <img
-                        src={getImageUrl(menu.image)!}
+                        src={getImageUrl(menu.image)}
                         alt={menu.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {
@@ -251,34 +267,31 @@ export default function UserMenuPage() {
                             "https://placehold.co/400x300?text=No+Image";
                         }}
                       />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-stone-300 text-4xl">
-                        🍽️
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <span className="text-[10px] text-stone-400 bg-stone-50 px-2 py-0.5 rounded-full">
-                      {categories.find((c) => c.id === menu.categoryId)?.name ||
-                        "Menu"}
-                    </span>
-                    <h3 className="font-medium text-stone-800 mt-1">
-                      {menu.name}
-                    </h3>
-                    <p className="text-stone-400 text-xs mt-1 line-clamp-2">
-                      {menu.description}
-                    </p>
-                    <div className="flex justify-between items-center mt-3">
-                      <span className="font-semibold text-stone-700">
-                        Rp {menu.price.toLocaleString()}
-                      </span>
-                      <button
-                        onClick={() => addToCart(menu)}
-                        className="bg-stone-800 text-white w-8 h-8 rounded-full text-lg hover:bg-stone-700 transition flex items-center justify-center"
-                      >
-                        +
-                      </button>
                     </div>
+                    <div className="p-4">
+                      <span className="text-[10px] text-stone-400 bg-stone-50 px-2 py-0.5 rounded-full">
+                        {categories.find((c) => c.id === menu.categoryId)
+                          ?.name || "Menu"}
+                      </span>
+                      <h3 className="font-medium text-stone-800 mt-1">
+                        {menu.name}
+                      </h3>
+                      <p className="text-stone-400 text-xs mt-1 line-clamp-2">
+                        {menu.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 pt-0 flex justify-between items-center mt-auto">
+                    <span className="font-semibold text-stone-700">
+                      Rp {menu.price.toLocaleString()}
+                    </span>
+                    <button
+                      onClick={() => addToCart(menu)}
+                      className="bg-stone-800 text-white w-8 h-8 rounded-full text-lg hover:bg-stone-700 transition flex items-center justify-center select-none"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
               ))}
@@ -339,16 +352,16 @@ export default function UserMenuPage() {
                           <div className="flex items-center gap-2 mt-1">
                             <button
                               onClick={() => removeFromCart(item.menu.id)}
-                              className="bg-white border border-stone-300 w-6 h-6 rounded-full text-xs"
+                              className="bg-white border border-stone-300 w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold"
                             >
                               -
                             </button>
-                            <span className="text-sm text-stone-700">
+                            <span className="text-sm text-stone-700 font-medium">
                               {item.qty}
                             </span>
                             <button
                               onClick={() => addToCart(item.menu)}
-                              className="bg-stone-800 text-white w-6 h-6 rounded-full text-xs"
+                              className="bg-stone-800 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold"
                             >
                               +
                             </button>
@@ -378,6 +391,37 @@ export default function UserMenuPage() {
                     />
                   </div>
 
+                  {/* Pilihan Metode Pembayaran */}
+                  <div className="mb-4">
+                    <p className="text-sm text-stone-600 mb-2 font-medium">
+                      Metode Bayar
+                    </p>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="CASH"
+                          checked={paymentMethod === "CASH"}
+                          onChange={() => setPaymentMethod("CASH")}
+                          className="w-4 h-4 accent-stone-800"
+                        />
+                        <span className="text-sm text-stone-700">Tunai</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="QRIS"
+                          checked={paymentMethod === "QRIS"}
+                          onChange={() => setPaymentMethod("QRIS")}
+                          className="w-4 h-4 accent-stone-800"
+                        />
+                        <span className="text-sm text-stone-700">QRIS</span>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="bg-stone-100 rounded-lg p-3 mb-4">
                     <div className="flex justify-between">
                       <span className="text-stone-600 text-sm">Total</span>
@@ -389,7 +433,7 @@ export default function UserMenuPage() {
 
                   <button
                     onClick={handleCheckout}
-                    className="w-full bg-stone-800 text-white py-3 rounded-lg font-medium hover:bg-stone-700 transition text-sm"
+                    className="w-full bg-stone-800 text-white py-3 rounded-lg font-medium hover:bg-stone-700 transition text-sm shadow-sm"
                   >
                     Konfirmasi Pesanan
                   </button>
