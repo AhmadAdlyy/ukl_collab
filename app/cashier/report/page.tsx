@@ -63,9 +63,7 @@ export default function ReportPage() {
       const data = await res.json();
 
       if (Array.isArray(data)) {
-        const doneOrders = data.filter(
-          (o) => o.status === "COMPLETED", // ← hanya COMPLETED yang dianggap selesai
-        );
+        const doneOrders = data.filter((o) => o.status === "DONE");
 
         const totalRevenue = doneOrders.reduce(
           (sum, o) => sum + (o.total || 0),
