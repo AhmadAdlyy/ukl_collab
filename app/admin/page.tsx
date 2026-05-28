@@ -154,8 +154,11 @@ export default function AdminDashboardPage() {
         });
 
         // Buat data chart per hari (7 hari terakhir)
-        const doneOrders = Array.isArray(orders)
-          ? orders.filter((order: Order) => order.status === "DONE")
+        const doneOrders: Order[] = Array.isArray(orders)
+          ? orders.filter((order: Order) => {
+              const orderDate = new Date(order.createdAt);
+              return orderDate >= today; // tanpa filter status
+            })
           : [];
 
         const last7Days = [];
