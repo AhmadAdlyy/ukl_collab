@@ -21,22 +21,6 @@ interface CartItem {
   qty: number;
 }
 
-type PaymentMethod = "CASH" | "QRIS";
-
-type OrderItemPayload = {
-  menuId: number;
-  qty: number;
-  subtotal: number;
-};
-
-type OrderPayload = {
-  customerName: string;
-  tableNumber: string;
-  total: number;
-  paymentMethod: PaymentMethod;
-  items: OrderItemPayload[];
-};
-
 export default function UserMenuPage() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -48,48 +32,48 @@ export default function UserMenuPage() {
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
 
   const API_URL = "https://restaurantapi-production-1747.up.railway.app";
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
+      setError("");
       try {
-        setLoading(true);
-        setError("");
-
         const [catRes, menuRes] = await Promise.all([
           fetch(`${API_URL}/category`),
           fetch(`${API_URL}/menu`),
         ]);
 
-        const categoriesData: unknown = await catRes.json();
-        const menusData: unknown = await menuRes.json();
+        const categoriesData = await catRes.json();
+        const menusData = await menuRes.json();
 
         setCategories(Array.isArray(categoriesData) ? categoriesData : []);
         setMenus(Array.isArray(menusData) ? menusData : []);
-      } catch (err) {
-        console.error(err);
-        setError("Gagal memuat data");
+      } catch (error) {
+        console.error("Gagal mengambil data:", error);
+        setError("Gagal memuat data. Coba lagi nanti.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, []); // Mengosongkan dependency array karena API_URL adalah variabel statis di luar/dalam scope komponen
 
   const filteredMenus =
     selectedCategory === null
       ? menus
-      : menus.filter((m) => m.categoryId === selectedCategory);
+      : menus.filter((menu) => menu.categoryId === selectedCategory);
 
   const addToCart = (menu: MenuItem) => {
-    const exist = cart.find((c) => c.menu.id === menu.id);
-
-    if (exist) {
+    const existing = cart.find((item) => item.menu.id === menu.id);
+    if (existing) {
       setCart(
-        cart.map((c) => (c.menu.id === menu.id ? { ...c, qty: c.qty + 1 } : c)),
+        cart.map((item) =>
+          item.menu.id === menu.id ? { ...item, qty: item.qty + 1 } : item,
+        ),
       );
     } else {
       setCart([...cart, { menu, qty: 1 }]);
@@ -97,14 +81,15 @@ export default function UserMenuPage() {
   };
 
   const removeFromCart = (id: number) => {
-    const exist = cart.find((c) => c.menu.id === id);
-
-    if (exist && exist.qty > 1) {
+    const existing = cart.find((item) => item.menu.id === id);
+    if (existing && existing.qty > 1) {
       setCart(
-        cart.map((c) => (c.menu.id === id ? { ...c, qty: c.qty - 1 } : c)),
+        cart.map((item) =>
+          item.menu.id === id ? { ...item, qty: item.qty - 1 } : item,
+        ),
       );
     } else {
-      setCart(cart.filter((c) => c.menu.id !== id));
+      setCart(cart.filter((item) => item.menu.id !== id));
     }
   };
 
@@ -112,25 +97,25 @@ export default function UserMenuPage() {
     (sum, item) => sum + item.menu.price * item.qty,
     0,
   );
-
   const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
 
   const handleCheckout = async () => {
-    if (!customerName.trim() || !tableNumber.trim()) {
-      alert("Nama & meja wajib diisi");
+    if (customerName.trim() === "" || tableNumber === "") {
+      alert("Nama dan Nomor Meja wajib diisi!");
       return;
     }
-
     if (cart.length === 0) {
-      alert("Keranjang kosong");
+      alert("Keranjang masih kosong!");
       return;
     }
 
     setCheckoutLoading(true);
 
-    const payload: OrderPayload = {
+    // FIX 1: Cek apakah input meja adalah angka murni.
+    // Jika backend meminta Integer, maka "05" harus diubah menjadi 5.
+    const orderData = {
       customerName: customerName.trim(),
-      tableNumber: tableNumber.trim(),
+      tableNumber: String(tableNumber).trim(),
       total: totalPrice,
       paymentMethod,
       items: cart.map((item) => ({
@@ -143,83 +128,436 @@ export default function UserMenuPage() {
     try {
       const res = await fetch(`${API_URL}/order`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
       });
 
-      const data: unknown = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        const message =
-          typeof data === "object" && data !== null && "message" in data
-            ? (data as { message: string }).message
-            : "Server error";
-
-        alert(message);
-        return;
+      if (res.ok) {
+        if (paymentMethod === "QRIS") {
+          alert(
+            "Silakan scan QR Code di kasir / monitor untuk menyelesaikan pembayaran",
+          );
+        } else {
+          alert(
+            "Pesanan berhasil dibuat! Silakan lakukan pembayaran ke kasir.",
+          );
+        }
+        setCart([]);
+        setIsCartOpen(false);
+        setCustomerName("");
+        setTableNumber("");
+      } else {
+        // FIX 2: Menangkap pesan error asli/detail dari backend secara lebih presisi
+        const errorData = await res.json().catch(() => ({}));
+        alert(
+          `Gagal memproses pesanan: ${errorData.message || errorData.error || "Terjadi kesalahan server"}`,
+        );
       }
-
-      alert("Pesanan berhasil dibuat");
-
-      setCart([]);
-      setCustomerName("");
-      setTableNumber("");
-      setIsCartOpen(false);
     } catch (err) {
       console.error(err);
-      alert("Network error");
+      alert("Gagal mengirim pesanan, periksa koneksi internet Anda.");
     } finally {
       setCheckoutLoading(false);
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div>{error}</div>;
+  const getImageUrl = (imagePath: string) => {
+    if (!imagePath) return "https://placehold.co/400x300?text=No+Image";
 
-  return (
-    <div className="min-h-screen p-4">
-      <h1 className="text-xl font-bold">Menu</h1>
+    if (
+      imagePath.startsWith("data:") ||
+      imagePath.startsWith("http://") ||
+      imagePath.startsWith("https://")
+    ) {
+      return imagePath;
+    }
 
-      {/* MENU */}
-      <div className="grid grid-cols-2 gap-3 mt-4">
-        {filteredMenus.map((menu) => (
-          <div key={menu.id} className="border p-3 rounded">
-            <h2>{menu.name}</h2>
-            <p>Rp {menu.price}</p>
+    return `${API_URL}/uploads/${imagePath}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="relative">
+            <div className="w-20 h-20 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <span className="absolute inset-0 flex items-center justify-center text-2xl">
+              🍜
+            </span>
+          </div>
+          <p className="text-stone-600 font-medium">Menghidangkan menu...</p>
+          <p className="text-stone-400 text-sm mt-1">Sebentar lagi siap!</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-stone-100 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-6">
+          <div className="text-6xl mb-4">😢</div>
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p className="text-red-600 font-medium">{error}</p>
             <button
-              onClick={() => addToCart(menu)}
-              className="bg-blue-500 text-white px-2 py-1 mt-2"
+              onClick={() => window.location.reload()}
+              className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 transition"
             >
-              +
+              Coba Lagi
             </button>
           </div>
-        ))}
+        </div>
       </div>
+    );
+  }
 
-      {/* CART */}
-      <div className="mt-6">
-        <h2>Cart ({totalItems})</h2>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50/30 to-stone-100">
+      {/* Navbar */}
+      <nav className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 border-b border-orange-100/50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg bg-white flex items-center justify-center">
+                <img
+                  src="/icon.png"
+                  alt="Savory Logo"
+                  className="w-full h-full object-cover"
+                />
+              </div>
 
-        {cart.map((item) => (
-          <div key={item.menu.id} className="flex gap-2">
-            <p>{item.menu.name}</p>
-            <p>{item.qty}</p>
-            <button onClick={() => removeFromCart(item.menu.id)}>-</button>
+              <div>
+                <span className="font-bold text-xl bg-gradient-to-r from-stone-800 to-stone-600 bg-clip-text text-transparent">
+                  Savory
+                </span>
+                <p className="text-xs text-stone-400 -mt-1">Restaurant</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative group"
+            >
+              <div className="flex items-center gap-2 bg-gradient-to-r from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 px-4 py-2 rounded-full text-white transition-all duration-300 shadow-md hover:shadow-lg">
+                <span className="text-lg">🛒</span>
+                {totalItems > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-lg">
+                    {totalItems}
+                  </span>
+                )}
+                <span className="hidden sm:inline text-sm font-medium">
+                  Rp {totalPrice.toLocaleString()}
+                </span>
+              </div>
+            </button>
           </div>
-        ))}
+        </div>
+      </nav>
 
-        <p>Total: Rp {totalPrice}</p>
-
-        <button
-          onClick={handleCheckout}
-          disabled={checkoutLoading}
-          className="bg-green-600 text-white px-3 py-2 mt-3"
-        >
-          {checkoutLoading ? "Loading..." : "Checkout"}
-        </button>
+      {/* Hero Section */}
+      <div className="relative bg-gradient-to-r from-stone-900 via-stone-800 to-stone-900 text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-10 left-10 text-8xl">🍜</div>
+          <div className="absolute bottom-10 right-10 text-8xl">🥢</div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 py-16 text-center relative">
+          <h1 className="text-5xl md:text-6xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">
+            Savory Restaurant
+          </h1>
+          <p className="text-stone-300 text-lg max-w-md mx-auto">
+            Nikmati hidangan lezat langsung dari meja Anda
+          </p>
+          <div className="flex justify-center gap-2 mt-6">
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs">
+              ✨ Cepat
+            </span>
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs">
+              🍽️ Mudah
+            </span>
+            <span className="px-3 py-1 bg-white/10 rounded-full text-xs">
+              😋 Enak
+            </span>
+          </div>
+        </div>
       </div>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Kategori */}
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-stone-600 uppercase tracking-wider">
+              Kategori Menu
+            </h2>
+            {selectedCategory !== null && (
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+              >
+                Lihat Semua →
+              </button>
+            )}
+          </div>
+          <div className="overflow-x-auto pb-3">
+            <div className="flex gap-2 min-w-max">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                  selectedCategory === null
+                    ? "bg-gradient-to-r from-stone-800 to-stone-700 text-white shadow-lg transform scale-105"
+                    : "bg-white text-stone-600 hover:bg-stone-50 border border-stone-200 hover:border-stone-300 hover:shadow-sm"
+                }`}
+              >
+                🍽️ Semua
+              </button>
+              {categories.map((category) => {
+                const icons: Record<string, string> = {
+                  Makanan: "🍛",
+                  Minuman: "🥤",
+                  Snack: "🍿",
+                };
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => setSelectedCategory(category.id)}
+                    className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                      selectedCategory === category.id
+                        ? "bg-gradient-to-r from-stone-800 to-stone-700 text-white shadow-lg transform scale-105"
+                        : "bg-white text-stone-600 hover:bg-stone-50 border border-stone-200 hover:border-stone-300 hover:shadow-sm"
+                    }`}
+                  >
+                    {icons[category.name] || "🍽️"} {category.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Menu Grid */}
+        {filteredMenus.length === 0 ? (
+          <div className="text-center py-20 bg-white/60 backdrop-blur-sm rounded-2xl border border-dashed border-stone-300">
+            <span className="text-7xl mb-4 block opacity-40">🍽️</span>
+            <p className="text-stone-500 font-medium">
+              Belum ada menu di kategori ini
+            </p>
+            <p className="text-stone-400 text-sm mt-1">
+              Coba pilih kategori lain
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredMenus.map((menu) => (
+                <div
+                  key={menu.id}
+                  className="group bg-white rounded-2xl border border-stone-100 overflow-hidden hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="relative h-48 overflow-hidden bg-gradient-to-br from-orange-100 to-amber-100">
+                      <img
+                        src={getImageUrl(menu.image)}
+                        alt={menu.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://placehold.co/400x300?text=No+Image";
+                        }}
+                      />
+                      <div className="absolute top-3 right-3">
+                        <span className="bg-white/90 backdrop-blur-sm text-stone-700 text-[11px] px-2.5 py-1 rounded-full font-semibold shadow-sm">
+                          {categories.find((c) => c.id === menu.categoryId)
+                            ?.name || "Menu"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-5">
+                      <h3 className="font-bold text-stone-800 text-base mb-1 group-hover:text-orange-600 transition-colors">
+                        {menu.name}
+                      </h3>
+                      <p className="text-stone-400 text-xs line-clamp-2 leading-relaxed">
+                        {menu.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-5 pt-0 flex justify-between items-center mt-auto">
+                    <span className="font-extrabold text-stone-800 text-base sm:text-lg">
+                      Rp {menu.price.toLocaleString()}
+                    </span>
+                    <button
+                      onClick={() => addToCart(menu)}
+                      className="bg-gradient-to-r from-orange-500 to-amber-500 text-white w-9 h-9 rounded-full text-xl hover:from-orange-600 hover:to-amber-600 transition shadow-md active:scale-95 flex items-center justify-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <p className="text-xs text-stone-400">
+                Menampilkan {filteredMenus.length} menu pilihan
+              </p>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* Cart Sidebar */}
+      {isCartOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-stone-900/40 backdrop-blur-sm z-50 transition-opacity"
+            onClick={() => setIsCartOpen(false)}
+          />
+          <div className="fixed right-0 top-0 h-full w-full max-w-[90vw] sm:max-w-md bg-white shadow-2xl z-50 flex flex-col justify-between">
+            <div className="bg-gradient-to-r from-stone-900 to-stone-800 text-white p-4 flex justify-between items-center shrink-0 shadow-md">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🛒</span>
+                <h2 className="font-semibold text-lg">Pesanan Saya</h2>
+              </div>
+              <button
+                onClick={() => setIsCartOpen(false)}
+                className="text-white/70 hover:text-white text-xl p-2 rounded-full hover:bg-white/10 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto space-y-5">
+              {cart.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="text-6xl mb-4 opacity-30">🛒</div>
+                  <p className="text-stone-400 font-medium">
+                    Keranjang belanja Anda kosong
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-3 max-h-[35vh] overflow-y-auto pr-1">
+                    {cart.map((item) => (
+                      <div
+                        key={item.menu.id}
+                        className="flex justify-between items-center bg-stone-50 p-3 rounded-xl border border-stone-100 shadow-sm"
+                      >
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-stone-800 text-sm">
+                            {item.menu.name}
+                          </h3>
+                          <p className="text-stone-500 text-xs mt-0.5">
+                            Rp {item.menu.price.toLocaleString()}
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              onClick={() => removeFromCart(item.menu.id)}
+                              className="bg-white border border-stone-200 w-7 h-7 rounded-full text-xs flex items-center justify-center font-bold shadow-sm active:bg-stone-100 text-stone-600"
+                            >
+                              -
+                            </button>
+                            <span className="text-sm text-stone-800 font-semibold min-w-[20px] text-center">
+                              {item.qty}
+                            </span>
+                            <button
+                              onClick={() => addToCart(item.menu)}
+                              className="bg-gradient-to-r from-stone-800 to-stone-700 text-white w-7 h-7 rounded-full text-xs flex items-center justify-center font-bold shadow-sm active:from-stone-700 text-center"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <span className="font-bold text-stone-700 text-sm ml-2">
+                          Rp {(item.menu.price * item.qty).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3 border-t border-stone-100 pt-4">
+                    <label className="block text-xs font-bold text-stone-500 uppercase tracking-wider">
+                      Informasi Meja
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Nama Lengkap Anda"
+                      className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:border-orange-400 focus:bg-white transition text-sm shadow-inner"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Nomor / Kode Meja (Contoh: 05 atau 12)"
+                      className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:border-orange-400 focus:bg-white transition text-sm shadow-inner"
+                      value={tableNumber}
+                      onChange={(e) => setTableNumber(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="border-t border-stone-100 pt-4">
+                    <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-3">
+                      Metode Pembayaran
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label
+                        className={`flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer select-none transition-all ${paymentMethod === "CASH" ? "border-orange-500 bg-orange-50/50 text-orange-700 font-semibold" : "border-stone-200 text-stone-600 hover:bg-stone-50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="CASH"
+                          checked={paymentMethod === "CASH"}
+                          onChange={() => setPaymentMethod("CASH")}
+                          className="sr-only"
+                        />
+                        <span>💵 Kasir / Tunai</span>
+                      </label>
+                      <label
+                        className={`flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer select-none transition-all ${paymentMethod === "QRIS" ? "border-orange-500 bg-orange-50/50 text-orange-700 font-semibold" : "border-stone-200 text-stone-600 hover:bg-stone-50"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="QRIS"
+                          checked={paymentMethod === "QRIS"}
+                          onChange={() => setPaymentMethod("QRIS")}
+                          className="sr-only"
+                        />
+                        <span>📱 QRIS Dinamis</span>
+                      </label>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <div className="p-4 border-t border-stone-100 bg-stone-50/50 shrink-0">
+                <div className="bg-white border border-stone-200 rounded-xl p-4 mb-4 flex justify-between items-center shadow-sm">
+                  <span className="text-stone-500 text-sm font-medium">
+                    Total Pembayaran
+                  </span>
+                  <span className="font-black text-stone-900 text-lg">
+                    Rp {totalPrice.toLocaleString()}
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleCheckout}
+                  disabled={checkoutLoading}
+                  className="w-full bg-gradient-to-r from-orange-500 to-amber-500 text-white py-3.5 rounded-xl font-bold hover:from-orange-600 hover:to-amber-600 transition text-sm shadow-md disabled:from-stone-400 disabled:to-stone-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {checkoutLoading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-stone-200 border-t-white rounded-full animate-spin"></div>
+                      <span>Memproses Pesanan...</span>
+                    </>
+                  ) : (
+                    <span>Konfirmasi & Pesan Sekarang</span>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
