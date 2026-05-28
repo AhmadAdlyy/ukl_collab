@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
-// Definisi interface untuk struktur token payload yang aman
 interface JWTPayload {
   role?: string;
   Role?: string;
@@ -16,7 +14,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,14 +32,12 @@ export default function LoginPage() {
 
       const data = await res.json();
 
-      // Jika status code bukan 2xx (misal 400, 401, 500)
       if (!res.ok) {
         setError(data.message || "Username atau password salah");
         setLoading(false);
         return;
       }
 
-      // Ambil token dengan mengantisipasi variasi nama properti dari API
       const token = data.access_token || data.token || data.data?.token;
       if (!token || typeof token !== "string") {
         setError("Login berhasil, tetapi token tidak ditemukan dari server.");
@@ -50,10 +45,11 @@ export default function LoginPage() {
         return;
       }
 
-      // Simpan ke localStorage
-      localStorage.setItem("token", token);
+      // SIMPAN KE COOKIES (Agar bisa dibaca oleh middleware.ts)
+      // Expire dalam 1 hari (86400 detik)
+      document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Strict; Secure`;
 
-      // Ambil role langsung dari response body (antisipasi nested object)
+      // Ambil role langsung dari response body
       const rawRole =
         data.role ||
         data.user?.role ||
@@ -67,7 +63,6 @@ export default function LoginPage() {
         try {
           const tokenParts = token.split(".");
           if (tokenParts.length === 3) {
-            // Normalisasi base64 agar aman dari karakter khusus di production browser
             const payloadBase64 = tokenParts[1]
               .replace(/-/g, "+")
               .replace(/_/g, "/");
@@ -95,15 +90,15 @@ export default function LoginPage() {
         }
       }
 
-      // Proses Navigasi berdasarkan Role
+      // NAVIGASI MENGGUNAKAN WINDOW.LOCATION (Lebih aman untuk sinkronisasi cookie baru di production)
       if (userRole === "ADMIN") {
-        router.push("/admin");
+        window.location.href = "/admin";
       } else if (
         userRole === "CASHIR" ||
         userRole === "CASHIER" ||
         userRole === "KASIR"
       ) {
-        router.push("/cashier");
+        window.location.href = "/cashier";
       } else {
         setError(
           `Role tidak dikenali ("${userRole || "KOSONG"}"). Tidak dapat mengalihkan halaman.`,
@@ -111,7 +106,6 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error("Error Sistem:", err);
-      // Pengecekan tipe error secara aman tanpa 'any'
       if (err instanceof Error) {
         setError(`Terjadi kesalahan: ${err.message}`);
       } else {
