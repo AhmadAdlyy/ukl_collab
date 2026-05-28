@@ -116,13 +116,17 @@ export default function UserMenuPage() {
     const orderData = {
       customerName: customerName.trim(),
       tableNumber: String(tableNumber).trim(),
-      paymentMethod,
+
       total: cart.reduce((sum, item) => sum + item.menu.price * item.qty, 0),
+
+      paymentMethod,
+
+      // optional tapi aman kalau backend pakai default
+      paymentStatus: "UNPAID",
 
       items: cart.map((item) => ({
         menuId: item.menu.id,
         qty: item.qty,
-        price: item.menu.price,
         subtotal: item.menu.price * item.qty,
       })),
     };
