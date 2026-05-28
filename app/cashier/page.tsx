@@ -15,6 +15,7 @@ interface OrderItem {
 }
 
 interface Order {
+  cashierId: null;
   id: number;
   tableNumber: string;
   customerName: string;
@@ -74,6 +75,42 @@ export default function CashierPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchOrders();
   }, [fetchOrders]);
+
+  const handleClaimOrder = async (orderId: number) => {
+    const token = getCookieClient("token");
+
+    if (!token) {
+      alert("Sesi habis, silakan login kembali.");
+      router.push("/login");
+      return;
+    }
+
+    if (
+      !confirm("Ambil pesanan ini? Pesanan akan menjadi tanggung jawab Anda.")
+    )
+      return;
+
+    try {
+      const res = await fetch(`${API_URL}/order/${orderId}/claim`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        alert("Pesanan berhasil diambil!");
+        fetchOrders(); // Refresh daftar pesanan
+      } else {
+        const error = await res.json().catch(() => ({}));
+        alert(`Gagal: ${error.message || "Terjadi kesalahan"}`);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Gagal koneksi.");
+    }
+  };
 
   const handleUpdateStatus = async (orderId: number, newStatus: string) => {
     const token = getCookieClient("token");
@@ -394,6 +431,15 @@ export default function CashierPage() {
                   </div>
                 </div>
 
+                {order.cashierId === null && order.status === "PENDING" && (
+                  <button
+                    onClick={() => handleClaimOrder(order.id)}
+                    className="flex-1 bg-orange-500 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-orange-600 transition"
+                  >
+                    Ambil Pesanan
+                  </button>
+                )}
+                
                 <div className="flex gap-2">
                   {order.status === "PENDING" && (
                     <>
