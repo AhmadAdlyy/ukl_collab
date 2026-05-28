@@ -78,13 +78,25 @@ export default function AdminLayout({
       <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-stone-200 shadow-sm z-20 flex flex-col">
         {/* Logo */}
         <div className="p-5 border-b border-stone-100">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-stone-800 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm">🍜</span>
+          <div className="flex items-center gap-3">
+            {/* Logo */}
+            <div className="w-11 h-11 rounded-xl overflow-hidden bg-white shadow-md flex items-center justify-center border border-stone-200">
+              <img
+                src="/icon.png"
+                alt="Savory Logo"
+                className="w-full h-full object-contain p-1"
+              />
             </div>
-            <div>
-              <h1 className="text-lg font-medium text-stone-800">savory.</h1>
-              <p className="text-[9px] text-stone-400">Admin Panel</p>
+
+            {/* Text */}
+            <div className="leading-tight">
+              <h1 className="text-lg font-semibold text-stone-800">
+                Savory Restaurant
+              </h1>
+
+              <p className="text-[10px] tracking-wide uppercase text-stone-400">
+                Admin Panel
+              </p>
             </div>
           </div>
         </div>

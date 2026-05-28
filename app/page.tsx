@@ -30,7 +30,7 @@ export default function UserMenuPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [checkoutLoading, setCheckoutLoading] = useState(false); // Dipertahankan untuk mencegah double checkout
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
 
@@ -60,7 +60,7 @@ export default function UserMenuPage() {
     };
 
     fetchData();
-  }, [API_URL]);
+  }, []); // Mengosongkan dependency array karena API_URL adalah variabel statis di luar/dalam scope komponen
 
   const filteredMenus =
     selectedCategory === null
@@ -111,9 +111,16 @@ export default function UserMenuPage() {
 
     setCheckoutLoading(true);
 
+    // FIX 1: Cek apakah input meja adalah angka murni.
+    // Jika backend meminta Integer, maka "05" harus diubah menjadi 5.
+    const parsedTableNumber = Number(tableNumber.trim());
+    const finalTableNumber = isNaN(parsedTableNumber)
+      ? tableNumber.trim()
+      : parsedTableNumber;
+
     const orderData = {
       customerName: customerName.trim(),
-      tableNumber: tableNumber.trim(),
+      tableNumber: finalTableNumber,
       paymentMethod,
       items: cart.map((item) => ({
         menuId: item.menu.id,
@@ -144,9 +151,10 @@ export default function UserMenuPage() {
         setCustomerName("");
         setTableNumber("");
       } else {
+        // FIX 2: Menangkap pesan error asli/detail dari backend secara lebih presisi
         const errorData = await res.json().catch(() => ({}));
         alert(
-          `Gagal memproses pesanan: ${errorData.message || "Terjadi kesalahan server"}`,
+          `Gagal memproses pesanan: ${errorData.message || errorData.error || "Terjadi kesalahan server"}`,
         );
       }
     } catch (err) {
@@ -214,14 +222,19 @@ export default function UserMenuPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-amber-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white text-xl">🍜</span>
+              <div className="w-12 h-12 rounded-xl overflow-hidden shadow-lg bg-white flex items-center justify-center">
+                <img
+                  src="/icon.png"
+                  alt="Savory Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
+
               <div>
                 <span className="font-bold text-xl bg-gradient-to-r from-stone-800 to-stone-600 bg-clip-text text-transparent">
-                  savory.
+                  Savory
                 </span>
-                <p className="text-xs text-stone-400 -mt-1">restaurant</p>
+                <p className="text-xs text-stone-400 -mt-1">Restaurant</p>
               </div>
             </div>
             <button
@@ -252,7 +265,7 @@ export default function UserMenuPage() {
         </div>
         <div className="max-w-7xl mx-auto px-4 py-16 text-center relative">
           <h1 className="text-5xl md:text-6xl font-bold mb-3 bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">
-            savory.
+            Savory Restaurant
           </h1>
           <p className="text-stone-300 text-lg max-w-md mx-auto">
             Nikmati hidangan lezat langsung dari meja Anda
@@ -475,7 +488,7 @@ export default function UserMenuPage() {
                     />
                     <input
                       type="text"
-                      placeholder="Nomor / Kode Meja (Contoh: 05 atau VIP-1)"
+                      placeholder="Nomor / Kode Meja (Contoh: 05 atau 12)"
                       className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:border-orange-400 focus:bg-white transition text-sm shadow-inner"
                       value={tableNumber}
                       onChange={(e) => setTableNumber(e.target.value)}
