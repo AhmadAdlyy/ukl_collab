@@ -135,7 +135,7 @@ export default function UserMenuPage() {
       if (res.ok) {
         if (paymentMethod === "QRIS") {
           alert(
-            "Silakan scan QR Code di kasir / monitor untuk menyelesaikan pembayaran",
+            "Silakan scan QR Code di kasir untuk menyelesaikan pembayaran",
           );
         } else {
           alert(
