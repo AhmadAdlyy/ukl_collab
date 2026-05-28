@@ -90,19 +90,25 @@ export default function LoginPage() {
         }
       }
 
-      // NAVIGASI MENGGUNAKAN WINDOW.LOCATION (Lebih aman untuk sinkronisasi cookie baru di production)
+      // PERBAIKAN: Berikan jeda mikro (100ms) agar browser selesai mencatat cookie
+      // sebelum window.location memicu refresh siklus request baru.
       if (userRole === "ADMIN") {
-        window.location.href = "/admin";
+        setTimeout(() => {
+          window.location.href = "/admin";
+        }, 100);
       } else if (
         userRole === "CASHIR" ||
         userRole === "CASHIER" ||
         userRole === "KASIR"
       ) {
-        window.location.href = "/cashier";
+        setTimeout(() => {
+          window.location.href = "/cashier";
+        }, 100);
       } else {
         setError(
           `Role tidak dikenali ("${userRole || "KOSONG"}"). Tidak dapat mengalihkan halaman.`,
         );
+        setLoading(false);
       }
     } catch (err) {
       console.error("Error Sistem:", err);
@@ -111,7 +117,6 @@ export default function LoginPage() {
       } else {
         setError("Gagal terhubung ke server");
       }
-    } finally {
       setLoading(false);
     }
   };

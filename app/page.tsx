@@ -30,6 +30,7 @@ export default function UserMenuPage() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkoutLoading, setCheckoutLoading] = useState(false); // PERBAIKAN: Cegah double checkout
   const [error, setError] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
 
@@ -108,9 +109,11 @@ export default function UserMenuPage() {
       return;
     }
 
+    setCheckoutLoading(true); // Mulai loading checkout
+
     const orderData = {
-      customerName,
-      tableNumber,
+      customerName: customerName.trim(),
+      tableNumber: tableNumber.trim(), // Tetap kirim string murni atau diubah ke Number(tableNumber) jika API mewajibkan integer
       paymentMethod,
       items: cart.map((item) => ({
         menuId: item.menu.id,
@@ -128,24 +131,33 @@ export default function UserMenuPage() {
 
       if (res.ok) {
         if (paymentMethod === "QRIS") {
-          alert("Silakan scan QR Code untuk menyelesaikan pembayaran");
+          alert(
+            "Silakan scan QR Code di kasir / monitor untuk menyelesaikan pembayaran",
+          );
         } else {
-          alert("Pesanan berhasil! Silakan bayar ke kasir.");
+          alert(
+            "Pesanan berhasil dibuat! Silakan lakukan pembayaran ke kasir.",
+          );
         }
+        // Reset Form & Cart
         setCart([]);
         setIsCartOpen(false);
         setCustomerName("");
         setTableNumber("");
       } else {
         const errorData = await res.json().catch(() => ({}));
-        alert(`Gagal memproses pesanan: ${errorData.message || "Coba lagi"}`);
+        alert(
+          `Gagal memproses pesanan: ${errorData.message || "Terjadi kesalahan server"}`,
+        );
       }
-    } catch {
-      alert("Gagal kirim pesanan, periksa koneksi internet.");
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengirim pesanan, periksa koneksi internet Anda.");
+    } finally {
+      setCheckoutLoading(false); // Matikan loading checkout
     }
   };
 
-  // Fungsi getImageUrl yang aman untuk Base64 hasil upload dari halaman admin
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return "https://placehold.co/400x300?text=No+Image";
 
@@ -162,10 +174,12 @@ export default function UserMenuPage() {
 
   if (loading) {
     return (
-      <div className="flex h-96 items-center justify-center">
+      <div className="flex h-screen items-center justify-center bg-stone-100">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-stone-200 border-t-stone-600 rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-stone-500 text-sm">Memuat menu...</p>
+          <p className="text-stone-500 text-sm font-medium">
+            Memuat menu savory...
+          </p>
         </div>
       </div>
     );
@@ -173,14 +187,22 @@ export default function UserMenuPage() {
 
   if (error) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <div className="text-center text-rose-600 text-sm">{error}</div>
+      <div className="flex h-screen items-center justify-center bg-stone-100">
+        <div className="text-center bg-white p-6 rounded-lg border border-stone-200 shadow-sm max-w-sm">
+          <div className="text-rose-500 text-sm font-medium mb-3">{error}</div>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs bg-stone-800 text-white px-3 py-1.5 rounded-md hover:bg-stone-700 transition"
+          >
+            Muat Ulang Halaman
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-stone-100">
+    <div className="min-h-screen bg-stone-100 flex flex-col">
       {/* Navbar */}
       <nav className="sticky top-0 z-50 bg-white border-b border-stone-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
@@ -195,7 +217,9 @@ export default function UserMenuPage() {
             className="flex items-center gap-2 bg-stone-800 hover:bg-stone-700 px-3 py-1.5 rounded-lg text-white text-sm transition"
           >
             <span>🛒</span>
-            <span className="text-xs">{totalItems}</span>
+            <span className="text-xs font-bold bg-white/20 px-1.5 py-0.5 rounded-full">
+              {totalItems}
+            </span>
             <span className="w-px h-3 bg-white/30"></span>
             <span className="text-xs">Rp {totalPrice.toLocaleString()}</span>
           </button>
@@ -212,9 +236,9 @@ export default function UserMenuPage() {
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
         {/* Kategori */}
-        <div className="mb-8 overflow-x-auto pb-2">
+        <div className="mb-8 overflow-x-auto pb-2 scrollbar-none">
           <div className="flex gap-2 min-w-max">
             <button
               onClick={() => setSelectedCategory(null)}
@@ -246,7 +270,9 @@ export default function UserMenuPage() {
         {filteredMenus.length === 0 ? (
           <div className="text-center py-16 bg-white rounded-lg border border-stone-200">
             <span className="text-5xl mb-3 block opacity-50">🍽️</span>
-            <p className="text-stone-400 text-sm">Belum ada menu</p>
+            <p className="text-stone-400 text-sm">
+              Belum ada menu di kategori ini
+            </p>
           </div>
         ) : (
           <>
@@ -254,14 +280,14 @@ export default function UserMenuPage() {
               {filteredMenus.map((menu) => (
                 <div
                   key={menu.id}
-                  className="bg-white rounded-lg border border-stone-200 hover:shadow-md transition flex flex-col justify-between"
+                  className="bg-white rounded-lg border border-stone-200 hover:shadow-md transition flex flex-col justify-between overflow-hidden"
                 >
                   <div>
-                    <div className="h-40 w-full bg-stone-100 rounded-t-lg overflow-hidden">
+                    <div className="h-40 w-full bg-stone-100 overflow-hidden">
                       <img
                         src={getImageUrl(menu.image)}
                         alt={menu.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src =
                             "https://placehold.co/400x300?text=No+Image";
@@ -269,11 +295,11 @@ export default function UserMenuPage() {
                       />
                     </div>
                     <div className="p-4">
-                      <span className="text-[10px] text-stone-400 bg-stone-50 px-2 py-0.5 rounded-full">
+                      <span className="text-[10px] text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full font-medium">
                         {categories.find((c) => c.id === menu.categoryId)
                           ?.name || "Menu"}
                       </span>
-                      <h3 className="font-medium text-stone-800 mt-1">
+                      <h3 className="font-medium text-stone-800 mt-1.5 text-sm sm:text-base">
                         {menu.name}
                       </h3>
                       <p className="text-stone-400 text-xs mt-1 line-clamp-2">
@@ -283,12 +309,12 @@ export default function UserMenuPage() {
                   </div>
 
                   <div className="p-4 pt-0 flex justify-between items-center mt-auto">
-                    <span className="font-semibold text-stone-700">
+                    <span className="font-semibold text-stone-700 text-sm sm:text-base">
                       Rp {menu.price.toLocaleString()}
                     </span>
                     <button
                       onClick={() => addToCart(menu)}
-                      className="bg-stone-800 text-white w-8 h-8 rounded-full text-lg hover:bg-stone-700 transition flex items-center justify-center select-none"
+                      className="bg-stone-800 text-white w-8 h-8 rounded-full text-lg hover:bg-stone-700 transition flex items-center justify-center select-none shadow-sm active:scale-95"
                     >
                       +
                     </button>
@@ -309,24 +335,26 @@ export default function UserMenuPage() {
       {isCartOpen && (
         <>
           <div
-            className="fixed inset-0 bg-black/40 z-50"
+            className="fixed inset-0 bg-black/40 z-50 transition-opacity"
             onClick={() => setIsCartOpen(false)}
           />
-          <div className="fixed right-0 top-0 h-full w-full max-w-[90vw] sm:max-w-md bg-white shadow-xl z-50 overflow-y-auto">
-            <div className="sticky top-0 bg-stone-800 text-white p-4 flex justify-between items-center">
+          <div className="fixed right-0 top-0 h-full w-full max-w-[90vw] sm:max-w-md bg-white shadow-xl z-50 flex flex-col justify-between">
+            {/* Sidebar Header */}
+            <div className="bg-stone-800 text-white p-4 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2">
                 <span>🛒</span>
                 <h2 className="font-medium">Pesanan Saya</h2>
               </div>
               <button
                 onClick={() => setIsCartOpen(false)}
-                className="text-white/70 hover:text-white text-xl"
+                className="text-white/70 hover:text-white text-xl p-1"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-4">
+            {/* Sidebar Body */}
+            <div className="p-4 flex-1 overflow-y-auto space-y-5">
               {cart.length === 0 ? (
                 <div className="text-center py-16">
                   <div className="text-5xl mb-3 opacity-50">🛒</div>
@@ -336,11 +364,12 @@ export default function UserMenuPage() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-3 mb-5 max-h-80 overflow-y-auto">
-                    {cart.map((item, idx) => (
+                  {/* Cart List Items */}
+                  <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                    {cart.map((item) => (
                       <div
-                        key={idx}
-                        className="flex justify-between items-center bg-stone-50 p-3 rounded-lg"
+                        key={item.menu.id} // PERBAIKAN: Menggunakan ID menu unik sebagai key
+                        className="flex justify-between items-center bg-stone-50 p-3 rounded-lg border border-stone-100"
                       >
                         <div className="flex-1">
                           <h3 className="font-medium text-stone-800 text-sm">
@@ -349,32 +378,36 @@ export default function UserMenuPage() {
                           <p className="text-stone-500 text-xs">
                             Rp {item.menu.price.toLocaleString()}
                           </p>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-2 mt-1.5">
                             <button
                               onClick={() => removeFromCart(item.menu.id)}
-                              className="bg-white border border-stone-300 w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold"
+                              className="bg-white border border-stone-300 w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shadow-sm active:bg-stone-100"
                             >
                               -
                             </button>
-                            <span className="text-sm text-stone-700 font-medium">
+                            <span className="text-sm text-stone-700 font-medium min-w-4 text-center">
                               {item.qty}
                             </span>
                             <button
                               onClick={() => addToCart(item.menu)}
-                              className="bg-stone-800 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold"
+                              className="bg-stone-800 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold shadow-sm active:bg-stone-700"
                             >
                               +
                             </button>
                           </div>
                         </div>
-                        <span className="font-medium text-stone-700 text-sm">
+                        <span className="font-medium text-stone-700 text-sm ml-2">
                           Rp {(item.menu.price * item.qty).toLocaleString()}
                         </span>
                       </div>
                     ))}
                   </div>
 
-                  <div className="space-y-2 mb-4">
+                  {/* Input Data Pelanggan */}
+                  <div className="space-y-2 border-t border-stone-100 pt-4">
+                    <label className="block text-xs font-medium text-stone-600 mb-1">
+                      Informasi Meja
+                    </label>
                     <input
                       type="text"
                       placeholder="Nama Anda"
@@ -383,7 +416,7 @@ export default function UserMenuPage() {
                       onChange={(e) => setCustomerName(e.target.value)}
                     />
                     <input
-                      type="number"
+                      type="text" // Diubah ke text agar kompatibel jika ada penomoran meja seperti '03B' atau 'VIP-1'
                       placeholder="Nomor Meja"
                       className="w-full p-2.5 rounded-lg bg-stone-50 border border-stone-200 focus:outline-none focus:border-stone-400 text-sm"
                       value={tableNumber}
@@ -392,12 +425,12 @@ export default function UserMenuPage() {
                   </div>
 
                   {/* Pilihan Metode Pembayaran */}
-                  <div className="mb-4">
-                    <p className="text-sm text-stone-600 mb-2 font-medium">
-                      Metode Bayar
+                  <div className="border-t border-stone-100 pt-4">
+                    <p className="text-xs text-stone-600 mb-2 font-medium">
+                      Metode Pembayaran
                     </p>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="radio"
                           name="paymentMethod"
@@ -406,9 +439,11 @@ export default function UserMenuPage() {
                           onChange={() => setPaymentMethod("CASH")}
                           className="w-4 h-4 accent-stone-800"
                         />
-                        <span className="text-sm text-stone-700">Tunai</span>
+                        <span className="text-sm text-stone-700 font-medium">
+                          Tunai / Kasir
+                        </span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
                         <input
                           type="radio"
                           name="paymentMethod"
@@ -417,29 +452,44 @@ export default function UserMenuPage() {
                           onChange={() => setPaymentMethod("QRIS")}
                           className="w-4 h-4 accent-stone-800"
                         />
-                        <span className="text-sm text-stone-700">QRIS</span>
+                        <span className="text-sm text-stone-700 font-medium">
+                          QRIS Dinamis
+                        </span>
                       </label>
                     </div>
                   </div>
-
-                  <div className="bg-stone-100 rounded-lg p-3 mb-4">
-                    <div className="flex justify-between">
-                      <span className="text-stone-600 text-sm">Total</span>
-                      <span className="font-semibold text-stone-800">
-                        Rp {totalPrice.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleCheckout}
-                    className="w-full bg-stone-800 text-white py-3 rounded-lg font-medium hover:bg-stone-700 transition text-sm shadow-sm"
-                  >
-                    Konfirmasi Pesanan
-                  </button>
                 </>
               )}
             </div>
+
+            {/* Sidebar Footer */}
+            {cart.length > 0 && (
+              <div className="p-4 border-t border-stone-200 bg-stone-50 shrink-0">
+                <div className="bg-white border border-stone-200 rounded-lg p-3 mb-3 flex justify-between items-center shadow-sm">
+                  <span className="text-stone-600 text-sm font-medium">
+                    Total Pembayaran
+                  </span>
+                  <span className="font-bold text-stone-800 text-base">
+                    Rp {totalPrice.toLocaleString()}
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleCheckout}
+                  disabled={checkoutLoading}
+                  className="w-full bg-stone-800 text-white py-3 rounded-lg font-medium hover:bg-stone-700 transition text-sm shadow-sm disabled:bg-stone-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {checkoutLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-stone-200 border-t-white rounded-full animate-spin"></div>
+                      <span>Memproses...</span>
+                    </>
+                  ) : (
+                    <span>Konfirmasi Pesanan</span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}
