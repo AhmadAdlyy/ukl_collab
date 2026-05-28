@@ -237,7 +237,9 @@ export default function UserMenuPage() {
               onClick={() => setIsCartOpen(true)}
               className="relative group"
             >
-              <div className="flex items-center gap-2 bg-gradient-to-r from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 px-4 py-2 rounded-full text-white transition-all duration-300 shadow-md hover:shadow-lg">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-stone-800 to-stone-700 hover:from-stone-700 hover:to-stone-600 px-4 py-2 rounded-full text-white transition-all duration-300 shadow-md hover:shadow-lg relative">
+                {" "}
+                {/* ← tambahkan relative */}
                 <span className="text-lg">🛒</span>
                 {totalItems > 0 && (
                   <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold shadow-lg">
