@@ -26,7 +26,7 @@ export default function UserMenuPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
-  const [tableNumber, setTableNumber] = useState<number | "">("");
+  const [tableNumber, setTableNumber] = useState("");
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ export default function UserMenuPage() {
     // Jika backend meminta Integer, maka "05" harus diubah menjadi 5.
     const orderData = {
       customerName: customerName.trim(),
-      tableNumber: Number(tableNumber),
+      tableNumber: tableNumber,
       paymentMethod,
       items: cart.map((item) => ({
         menuId: item.menu.id,
@@ -486,11 +486,7 @@ export default function UserMenuPage() {
                       placeholder="Nomor / Kode Meja (Contoh: 05 atau 12)"
                       className="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 focus:outline-none focus:border-orange-400 focus:bg-white transition text-sm shadow-inner"
                       value={tableNumber}
-                      onChange={(e) =>
-                        setTableNumber(
-                          e.target.value === "" ? "" : Number(e.target.value),
-                        )
-                      }
+                      onChange={(e) => setTableNumber(e.target.value)}
                     />
                   </div>
 
