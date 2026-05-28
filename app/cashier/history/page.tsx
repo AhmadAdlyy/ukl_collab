@@ -54,7 +54,9 @@ export default function HistoryPage() {
       const data = await res.json();
 
       const completedOrders = Array.isArray(data)
-        ? data.filter((o) => o.status === "DONE" || o.status === "CANCEL")
+        ? data.filter((o) =>
+            ["DONE", "COMPLETED", "PAID", "CANCEL"].includes(o.status),
+          )
         : [];
       setHistory(completedOrders);
     } catch (error) {
